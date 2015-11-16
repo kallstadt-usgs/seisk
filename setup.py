@@ -5,6 +5,6 @@ setup(name='seisk',
       description='Codes for downloading data and interacting with it using obspy',
       author='Kate Allstadt',
       author_email='kallstadt@usgs.gov',
-      url='',
+      url='https://github.com/kallstadt-usgs/seisk/',
       packages=['reviewData', 'sigproc'],
       scripts=[])

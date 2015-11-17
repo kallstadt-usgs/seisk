@@ -3,6 +3,7 @@
 import numpy as np
 from obspy.core import Stream
 import matplotlib.pyplot as plt
+import numpy.ma as ma
 
 
 """
@@ -149,6 +150,52 @@ def meansqfreqSN(st, stnoise, SNrat=1.5, freqlim=(0, 25), win=None):
         fms[i] = np.sum(Cis**2*freqs1)/np.sum(Cis**2)
         var[i] = np.sum([(Cis[j]**2*(freq-fms[i])**2) for j, freq in enumerate(freqs1)])/np.sum(Cis**2)
     return fms, var
+
+
+def spectrumSN(st, stnoise, SNrat=1.5, win=None):
+    """
+    Return masked arrays of spectrum, masking where SNratio is greater than SNrat
+    USAGE
+    freqs, amps, freqmask, ampmask = spectrumSN(st, stnoise, SNrat=1.5, freqlim=(0, 25), win=None)
+    INPUTS
+    st = obspy stream object, or trace object
+    stnoise = obspy stream object from time period just before st (or whatever noise window desired, but needs to have same sample rate)
+    win = tuple of time window in seconds (e.g. win=(3., 20.)) over which to compute mean squared frequency, None computes for entire time window in each trace of st
+    OUTPUTS
+    freqs = list of np.arrays of frequency vectors (Hz)
+    amps = list of np.arrays of amplitude vectors
+    """
+    st = Stream(st)  # turn into a stream object in case st is a trace
+    stnoise = Stream(stnoise)
+    freqs = []  # preallocate
+    amps = []
+    freqmask = []
+    ampmask = []
+    for i, trace in enumerate(st):
+        if trace.stats.sampling_rate != stnoise[i].stats.sampling_rate:
+            print 'Signal and noise sample rates are different. Abort!'
+            return
+        tvec = maketvec(trace)  # Time vector
+        dat = trace.data
+        ptvec = maketvec(stnoise[i])
+        pdat = stnoise[i].data
+
+        if win is not None:
+            if win[1] > tvec.max() or win[0] < tvec.min():
+                print 'Time window specified not compatible with length of time series'
+                return
+            dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
+            trace = trace.trim(trace.stats.starttime+win[0], trace.stats.starttime+win[1])
+        # Find max nfft of the two and use that for both so they line up
+        maxnfft = np.max((nextpow2(len(dat)), nextpow2(len(pdat))))
+        freqs1, amps1 = spectrum_manual(dat, tvec, nfft=maxnfft)
+        pfreqs1, pamps1 = spectrum_manual(pdat, ptvec, nfft=maxnfft)
+        idx = (amps1/pamps1 > SNrat)  # good values
+        amps.append(amps1)
+        freqs.append(freqs1)
+        ampmask.append(ma.array(amps1, mask=idx))
+        freqmask.append(ma.array(freqs1, mask=idx))
+    return freqs, amps, freqmask, ampmask
 
 
 def signal_width(st):

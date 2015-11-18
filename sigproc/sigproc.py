@@ -196,6 +196,54 @@ def spectrumSN(st, stnoise, SNrat=1.5, win=None):
     return freqs, amps, ampmask
 
 
+def powspecSN(st, stnoise, SNrat=1.5, win=None):
+    """
+    Return masked arrays of power spectrum, masking where SNratio is greater than SNrat
+    USAGE
+    freqs, amps, ampmask = powspecSN(st, stnoise, SNrat=1.5, freqlim=(0, 25), win=None)
+    INPUTS
+    st = obspy stream object, or trace object
+    stnoise = obspy stream object from time period just before st (or whatever noise window desired, but needs to have same sample rate)
+    win = tuple of time window in seconds (e.g. win=(3., 20.)) over which to compute mean squared frequency, None computes for entire time window in each trace of st
+    OUTPUTS
+    freqs = list of np.arrays of frequency vectors (Hz)
+    amps = list of np.arrays of amplitudes
+    ampmaks = list of np.arrays of masked amplitudes
+    """
+    import obspy.signal.spectral_estimation as spec
+
+    st = Stream(st)  # turn into a stream object in case st is a trace
+    stnoise = Stream(stnoise)
+    freqs = []  # preallocate
+    amps = []
+    ampmask = []
+    for i, trace in enumerate(st):
+        if trace.stats.sampling_rate != stnoise[i].stats.sampling_rate:
+            print 'Signal and noise sample rates are different. Abort!'
+            return
+        Fs = trace.stats.sampling_rate  # Time vector
+        dat = trace.data
+        pFs = stnoise[i].stats.sampling_rate
+        pdat = stnoise[i].data
+        tvec = maketvec(trace)  # Time vector
+
+        if win is not None:
+            if win[1] > tvec.max() or win[0] < tvec.min():
+                print 'Time window specified not compatible with length of time series'
+                return
+            dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
+            trace = trace.trim(trace.stats.starttime+win[0], trace.stats.starttime+win[1])
+        # Find max nfft of the two and use that for both so they line up
+        maxnfft = np.max((nextpow2(len(dat)), nextpow2(len(pdat))))
+        Pxx, f = spec.psd(dat, nfft=maxnfft, Fs=Fs)
+        pPxx, pf = spec.psd(pdat, nfft=maxnfft, Fs=pFs)
+        idx = (Pxx/pPxx < SNrat)  # good values
+        amps.append(Pxx)
+        freqs.append(f)
+        ampmask.append(ma.array(Pxx, mask=idx))
+    return freqs, amps, ampmask
+
+
 def signal_width(st):
     pass
 

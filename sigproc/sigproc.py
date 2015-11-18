@@ -169,7 +169,6 @@ def spectrumSN(st, stnoise, SNrat=1.5, win=None):
     stnoise = Stream(stnoise)
     freqs = []  # preallocate
     amps = []
-    freqmask = []
     ampmask = []
     for i, trace in enumerate(st):
         if trace.stats.sampling_rate != stnoise[i].stats.sampling_rate:
@@ -194,8 +193,7 @@ def spectrumSN(st, stnoise, SNrat=1.5, win=None):
         amps.append(amps1)
         freqs.append(freqs1)
         ampmask.append(ma.array(amps1, mask=idx))
-        freqmask.append(ma.array(freqs1, mask=idx))
-    return freqs, amps, freqmask, ampmask
+    return freqs, amps, ampmask
 
 
 def signal_width(st):

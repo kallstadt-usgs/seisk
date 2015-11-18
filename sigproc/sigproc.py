@@ -235,8 +235,8 @@ def powspecSN(st, stnoise, SNrat=1.5, win=None):
             trace = trace.trim(trace.stats.starttime+win[0], trace.stats.starttime+win[1])
         # Find max nfft of the two and use that for both so they line up
         maxnfft = np.max((nextpow2(len(dat)), nextpow2(len(pdat))))
-        Pxx, f = spec.psd(dat, nfft=maxnfft, Fs=Fs)
-        pPxx, pf = spec.psd(pdat, nfft=maxnfft, Fs=pFs)
+        Pxx, f = spec.psd(dat, NFFT=maxnfft, Fs=Fs)
+        pPxx, pf = spec.psd(pdat, NFFT=maxnfft, Fs=pFs)
         idx = (Pxx/pPxx < SNrat)  # good values
         amps.append(Pxx)
         freqs.append(f)

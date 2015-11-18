@@ -189,7 +189,7 @@ def spectrumSN(st, stnoise, SNrat=1.5, win=None):
         maxnfft = np.max((nextpow2(len(dat)), nextpow2(len(pdat))))
         freqs1, amps1 = spectrum_manual(dat, tvec, nfft=maxnfft)
         pfreqs1, pamps1 = spectrum_manual(pdat, ptvec, nfft=maxnfft)
-        idx = (amps1/pamps1 > SNrat)  # good values
+        idx = (amps1/pamps1 < SNrat)  # good values
         amps.append(amps1)
         freqs.append(freqs1)
         ampmask.append(ma.array(amps1, mask=idx))

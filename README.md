@@ -27,6 +27,6 @@ pip uninstall seisk
 * urllib2
 
 ####Other
-*obspy
+* obspy
 [ObsPy](https://github.com/obspy/obspy/wiki) can be installed using Anaconda:
 conda install -c obspy obspy

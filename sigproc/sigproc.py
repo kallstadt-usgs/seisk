@@ -266,36 +266,35 @@ def kurtosis(st, winlen, BaillCF=False):
         for i in range(len(trace.data)-nLEN+1):
             a = ss.kurtosis(trace.data[i:(i+nLEN)], fisher=False)
             kurtos.append(a)
-            if BaillCF is False:
-                trace.data = kurtos
-            else:
-                # Remove all negative slopes
-                diffk = np.diff(kurtos)
-                F2 = np.zeros(len(kurtos))
-                F2[0] = 0.
-                for j in range(1, len(kurtos)):
-                    if diffk[j-1] < 0:
-                        delt = 0.
-                    else:
-                        delt = 1.
-                    F2[j] = F2[j-1] + delt * diffk[j-1]
-                b = F2[0]
-                a = (F2[-1] - F2[0])/(len(F2)-1)
-                F3 = np.zeros(len(kurtos))
-                for j in range(1, len(kurtos)):
-                    F3[j] = F2[j]-((a*(j-1))+b)
-                import pdb; pdb.set_trace()
-                [M, mintab] = peakdet(F3, (np.max(F3)-np.min(F3))/1000.)
-                F4 = np.zeros(len(kurtos))
-                for j in range(0, len(kurtos)):
-                    temp = M[:, 0] - j
-                    for k, t in enumerate(temp):
-                        if t < 0.:
-                            temp[k] = 10.e10
-                    index_min = temp.argmin()
-                    if F3[j] - M[index_min, 1] < 0.:
-                        F4[j] = F3[j] - M[index_min, 1]
-                trace.data = F4
+        if BaillCF is False:
+            trace.data = kurtos
+        else:
+            # Remove all negative slopes
+            diffk = np.diff(kurtos)
+            F2 = np.zeros(len(kurtos))
+            F2[0] = 0.
+            for j in range(1, len(kurtos)):
+                if diffk[j-1] < 0:
+                    delt = 0.
+                else:
+                    delt = 1.
+                F2[j] = F2[j-1] + delt * diffk[j-1]
+            b = F2[0]
+            a = (F2[-1] - F2[0])/(len(F2)-1)
+            F3 = np.zeros(len(kurtos))
+            for j in range(1, len(kurtos)):
+                F3[j] = F2[j]-((a*(j-1))+b)
+            [M, mintab] = peakdet(F3, (np.max(F3)-np.min(F3))/1000.)
+            F4 = np.zeros(len(kurtos))
+            for j in range(0, len(kurtos)):
+                temp = M[:, 0] - j
+                for k, t in enumerate(temp):
+                    if t < 0.:
+                        temp[k] = 10.e10
+                index_min = temp.argmin()
+                if F3[j] - M[index_min, 1] < 0.:
+                    F4[j] = F3[j] - M[index_min, 1]
+            trace.data = F4
     return st
 
 

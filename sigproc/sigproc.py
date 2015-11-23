@@ -290,10 +290,10 @@ def kurtosis(st, winlen, BaillCF=False):
             # This takes a long time - figure out why
             for j in range(0, len(kurtos)):
                 temp = indx[indx >= j] - j
-                #temp[temp < 0] = len(kurtos)+10.  # make big number
-                index_min = temp.argmin()
-                if F3[j] - M[index_min, 1] < 0.:
-                    F4[j] = F3[j] - M[index_min, 1]
+                if len(temp) > 0.:
+                    index_min = temp.argmin()
+                    if F3[j] - M[index_min, 1] < 0.:
+                        F4[j] = F3[j] - M[index_min, 1]
             trace.data = F4
     return st
 

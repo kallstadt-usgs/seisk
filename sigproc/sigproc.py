@@ -286,11 +286,10 @@ def kurtosis(st, winlen, BaillCF=False):
                 F3[j] = F2[j]-((a*(j-1))+b)
             [M, mintab] = peakdet(F3, (np.max(F3)-np.min(F3))/1000.)
             F4 = np.zeros(len(kurtos))
+            # This takes a long time - figure out why
             for j in range(0, len(kurtos)):
                 temp = M[:, 0] - j
-                for k, t in enumerate(temp):
-                    if t < 0.:
-                        temp[k] = 10.e10
+                temp[temp < 0] = len(kurtos)+10.  # make big number
                 index_min = temp.argmin()
                 if F3[j] - M[index_min, 1] < 0.:
                     F4[j] = F3[j] - M[index_min, 1]

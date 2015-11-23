@@ -729,7 +729,10 @@ class InteractivePlot:
                 self.ylims.append(self.ax.get_ylim()[1])
                 redraw = True
             elif self.numflag == 'J':
-                self.maxtraces = int(self.number)
+                try:
+                    self.maxtraces = int(self.number)
+                except:
+                    print('failed to change maxtraces')
                 self.number = ''
                 self.numflag = None
                 redraw = True

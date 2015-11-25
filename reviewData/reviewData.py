@@ -195,7 +195,7 @@ def getdata_winston(stations, okchannels, t1, t2, attach_response=True,
 
 def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_response=False, savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False):
     """
-    Read in sac files
+    Read in sac or mseed files
     USAGE
     st = getdata_sac(filenames, starttime=None, endtime=None, attach_response=False, chanuse='*', savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False)
     INPUTS
@@ -250,6 +250,21 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
             except Exception as e:
                 print e
                 print 'could not read %s, skipping to next file name' % file1
+        try:
+            st.merge(fill_value='interpolate')
+        except:
+            print 'bulk merge failed, trying station by station'
+            st_new = Stream()
+            stationlist = unique_list([trace.stats.station for trace in st])
+            for sta in stationlist:
+                temp = st.select(station=sta)
+                try:
+                    temp.merge(fill_value='interpolate')
+                    st_new += temp
+                except Exception as e:
+                    print e
+                    print('%s would not merge - deleting it') % (sta,)
+            st = st_new
         if starttime or endtime:
             st.trim(starttime=starttime, endtime=endtime, pad=True, fill_value=0)
         else:  # find min start time and trim all to same point

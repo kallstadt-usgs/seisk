@@ -284,16 +284,17 @@ def kurtosis(st, winlen, BaillCF=False):
             F3 = np.zeros(len(kurtos))
             for j in range(1, len(kurtos)):
                 F3[j] = F2[j]-((a*(j-1))+b)
-            [M, mintab] = peakdet(F3, (np.max(F3)-np.min(F3))/1000.)
+            [M, mintab] = sigproc.peakdet(F3, (np.max(F3)-np.min(F3))/100.)
             F4 = np.zeros(len(kurtos))
-            indx = M[:, 0]
+            indx = M[1:-1, 0]
             # This takes a long time - figure out why
             for j in range(0, len(kurtos)):
-                temp = indx[indx >= j] - j
+                temp = indx[indx > j] - j
                 if len(temp) > 0.:
-                    index_min = temp.argmin()
-                    if F3[j] - M[index_min, 1] < 0.:
-                        F4[j] = F3[j] - M[index_min, 1]
+                    #import pdb; pdb.set_trace()
+                    index_min = int(np.min(temp))
+                    if F3[j] - np.abs(M[index_min, 1]) < 0.:
+                        F4[j] = F3[j] - np.abs(M[index_min, 1])
             trace.data = F4
     return st
 

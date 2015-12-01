@@ -707,47 +707,75 @@ class InteractivePlot:
             if self.numflag is None:
                 pass
             if self.numflag == 'F1':  # got two inputs so now apply bandpass filter
-                self.input2 = float(self.number)
-                print('Filtering current data between %1.2f and %1.2f Hz' % (self.input1, self.input2))
-                self.print1.append('> Filtering current data between %1.2f and %1.2f Hz' % (self.input1, self.input2))
-                self.number = ''
-                self.st_current.detrend('linear')
-                self.st_current.taper(max_percentage=self.taper, type='cosine')
-                self.st_current.filter('bandpass', freqmin=self.input1, freqmax=self.input2,
-                                       corners=2, zerophase=False)
-                redraw = True
-                self.numflag = None
+                try:
+                    self.input2 = float(self.number)
+                    print('Filtering current data between %1.2f and %1.2f Hz' % (self.input1, self.input2))
+                    self.print1.append('> Filtering current data between %1.2f and %1.2f Hz' % (self.input1, self.input2))
+                    self.number = ''
+                    self.st_current.detrend('linear')
+                    self.st_current.taper(max_percentage=self.taper, type='cosine')
+                    self.st_current.filter('bandpass', freqmin=self.input1, freqmax=self.input2,
+                                           corners=2, zerophase=False)
+                    redraw = True
+                    self.numflag = None
+                except:
+                    temp = 'Failed, resetting'
+                    self.number = ''
+                    self.numflag = None
+                    print(temp)
+                    self.print1.append('> '+temp)
             elif self.numflag == 'F':  # need one more input for filter
-                self.input1 = float(self.number)
-                self.number = ''
-                self.numflag = 'F1'
-                temp = ('Type upper freq limit for filter and hit enter')
-                print(temp)
-                self.print1.append('> '+temp)
+                try:
+                    self.input1 = float(self.number)
+                    self.number = ''
+                    self.numflag = 'F1'
+                    temp = ('Type upper freq limit for filter and hit enter')
+                    print(temp)
+                    self.print1.append('> '+temp)
+                except:
+                    temp = 'Failed, resetting'
+                    self.number = ''
+                    self.numflag = None
+                    print(temp)
+                    self.print1.append('> '+temp)
             elif self.numflag == 'P':
-                self.input1 = float(self.number)
-                self.number = ''
-                self.pweight = self.input1
-                temp = ('Pick of %s phase at %s at %f sec weighted as %i, hit Y to keep it'
-                        % (self.phasep, self.picksta, self.picktime, self.pweight))
-                print(temp)
-                self.print1.append('> '+temp)
+                try:
+                    self.input1 = float(self.number)
+                    self.number = ''
+                    self.pweight = self.input1
+                    temp = ('Pick of %s phase at %s at %f sec weighted as %i, hit Y to keep it'
+                            % (self.phasep, self.picksta, self.picktime, self.pweight))
+                    print(temp)
+                    self.print1.append('> '+temp)
+                except:
+                    temp = 'Failed, resetting'
+                    self.number = ''
+                    self.numflag = None
+                    print(temp)
+                    self.print1.append('> '+temp)
             elif self.numflag == 'W':
-                self.input1 = float(self.number)
-                self.number = ''
-                self.numflag = None
-                xlim = self.ax.get_xlim()
-                #save to lim history
-                self.xlims.append(xlim[0])
-                self.xlims.append(xlim[0]+self.input1)
-                self.ylims.append(self.ax.get_ylim()[0])
-                self.ylims.append(self.ax.get_ylim()[1])
-                redraw = True
+                try:
+                    self.input1 = float(self.number)
+                    self.number = ''
+                    self.numflag = None
+                    xlim = self.ax.get_xlim()
+                    #save to lim history
+                    self.xlims.append(xlim[0])
+                    self.xlims.append(xlim[0]+self.input1)
+                    self.ylims.append(self.ax.get_ylim()[0])
+                    self.ylims.append(self.ax.get_ylim()[1])
+                    redraw = True
+                except:
+                    temp = 'Failed, resetting'
+                    self.number = ''
+                    self.numflag = None
+                    print(temp)
+                    self.print1.append('> '+temp)
             elif self.numflag == 'J':
                 try:
                     self.maxtraces = int(self.number)
                 except:
-                    print('failed to change maxtraces')
+                    print('failed to change maxtraces, resetting')
                 self.number = ''
                 self.numflag = None
                 redraw = True

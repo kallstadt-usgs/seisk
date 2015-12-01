@@ -796,8 +796,10 @@ class InteractivePlot:
 
         #keep track of numbers that are typed in an print them as they are typed in
         if self.numflag is not None:
-            if self.numflag in '!,F,J,P,W,F1' and event.key is not 'enter':
+            if self.numflag in '!,F,J,P,W,F1' and event.key != 'enter':
+                print event.key
                 self.number = self.number + event.key
+                print self.number
                 event.key = '.'
                 #try:
                 #    int(event.key)

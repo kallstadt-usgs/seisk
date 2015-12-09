@@ -797,9 +797,7 @@ class InteractivePlot:
         #keep track of numbers that are typed in an print them as they are typed in
         if self.numflag is not None:
             if self.numflag in '!,F,J,P,W,F1' and event.key != 'enter':
-                print event.key
                 self.number = self.number + event.key
-                print self.number
                 event.key = '.'
                 #try:
                 #    int(event.key)
@@ -1399,15 +1397,15 @@ def get_stations_iris(event_lat, event_lon, event_time, minradiuskm=0., maxradiu
     return lines, source
 
 
-def get_stations_ncedc(event_lat, event_lon, event_time, radius_km=25, chan=('BH?,EH?,HH?,BDF')):
+def get_stations_ncedc(event_lat, event_lon, event_time, minradiuskm=0., maxradiuskm=25, chan=('BH?,EH?,HH?,BDF')):
     """
     Get station info from NCEDC webservices station tool for stations within specified radius
     service.ncedc.org/fdsnws/station/1/
     Can use ? wildcards in the channel designators, write whole channel list as one string
     """
     # build the url use to get station info from IRIS webservices
-    url = ('http://service.ncedc.org/fdsnws/station/1/query?latitude=%f&longitude=%f&maxradius=%f&cha=%s&startbefore=%s&endafter=%s&level=channel&format=text&nodata=404'
-           % (event_lat, event_lon, radius_km/111.32, chan, event_time.strftime('%Y-%m-%dT%H:%M:%S'),
+    url = ('http://service.ncedc.org/fdsnws/station/1/query?latitude=%f&longitude=%f&minradius=%f&maxradius=%f&cha=%s&startbefore=%s&endafter=%s&level=channel&format=text&nodata=404'
+           % (event_lat, event_lon, minradiuskm/111.32, maxradiuskm/111.32, chan, event_time.strftime('%Y-%m-%dT%H:%M:%S'),
               event_time.strftime('%Y-%m-%dT%H:%M:%S')))
     temp = urllib2.urlopen(url)
     file1 = temp.read()

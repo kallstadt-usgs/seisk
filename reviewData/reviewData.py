@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from matplotlib import mlab
 from obspy.fdsn import Client as FDSN_Client
 from obspy.earthworm import Client as ew_client
+from obspy.signal.invsim import seisSim, cornFreq2Paz
+from obspy import UTCDateTime
 import numpy as np
 import obspy.signal.filter as filte
 import os
@@ -272,6 +274,48 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
             st.trim(starttime=mint)  # ,pad = True, fill_value = 0)
         if savedat:  # save file if so choose
             st.write(folderdat+'/'+filename, format='PICKLE')
+    return st
+
+
+def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiuskm=0., maxradiuskm=20., channels='*', location='*', source='IRIS'):
+    """
+    Automatically pull existing data within a certain distance of the epicenter (or any lat/lon coordinates)
+    USAGE
+    INPUTS
+    event_lat = latitude of event in decimal degrees
+    event_lon = longitude of event in decimal degrees
+    event_time = Event time in UTC in any format obspy's UTCDateTime can parse - e.g. '2016-02-05T19:57:26'
+    tminus = number of seconds to add from event time for start time of data (use negative number to start before event_time)
+    tplus = number of seconds to add to event time for end time of data
+    radiuskm = radius to search for data
+    channels = 'strong motion' to get all strong motion channels (excluding low sample rate ones), 'broadband' to get all broadband instruments, 'short period' for all short period channels, otherwise a single line of comma separated channel codes, ? wildcards are okay, e.g. channels = '?N?,?L?'
+    location = comma separated list of location codes allowed, or '*' for all location codes
+    source = 'IRIS' or 'NCEDC'
+
+    OUTPUTS
+    st = obspy stream containing data from within requested area
+    """
+    if source == 'NCEDC':
+        lines, source = get_stations_ncedc(event_lat, event_lon, event_time, minradiuskm=minradiuskm, maxradiuskm=maxradiuskm, chan=('???'))
+        lines = lines[:-1]
+    else:
+        lines, source = get_stations_iris(event_lat, event_lon, event_time, minradiuskm=minradiuskm, maxradiuskm=maxradiuskm, chan=('???'))
+        lines = lines[:-1]
+    netnames = unique_list([line[0] for line in lines])
+    stanames = unique_list([line[1] for line in lines])
+    if channels.lower() == 'strong motion':
+        channels = 'EN?,HN?,BN?,EL?,HL?,EL?'
+    elif channels.lower() == 'broadband':
+        channels = 'BH?,HH?'
+    elif channels.lower() == 'short period':
+        channels = 'EH?'
+    else:
+        channels = channels.replace(' ', '')  # Get rid of spaces
+
+    t1 = UTCDateTime(event_time) + tstart
+    t2 = UTCDateTime(event_time) + tend
+
+    st = getdata(','.join(unique_list(netnames)), ','.join(unique_list(stanames)), location, channels, t1, t2, attach_response=True, clientname=source)
     return st
 
 
@@ -1412,6 +1456,129 @@ def get_stations_ncedc(event_lat, event_lon, event_time, minradiuskm=0., maxradi
     lines = [line.split('|') for line in file1.split('\n')[1:]]
     source = 'NCEDC'
     return lines, source
+
+
+def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=0.05, cosfilt=None, water_level=60., csvfile=None):
+    """
+    Performs station correction (st must have response info attached to it) - removes trends and tapers with 5 percent cosine taper before doing station correction, adds as field in st and prints out results, option to save csv file
+    All values in m/s and/or m/s**2
+    USAGE
+
+    INPUTS
+    st - stream of obspy traces of raw seismic data with response information attached - best if visually inspected in case there are data problems
+    pga - True if want to calculate pga
+    pgv - True if want to calculate pgv
+    psa - True if want to calculate peak spectral accelerations
+    periods - periods at which to calculate psa
+    damping - damping to use for psa calculations
+    cosfilt - tuple of four corners, in Hz, for cosine filter to use in station correction. None for no cosine filter
+    water_level - water level to use in station correction
+    csvfile - full file path of csvfile to output with results, None if don't want to output csvfile
+
+    OUTPUTS
+    stacc - stream of data corrected to acceleration with pga's, pgv's and psa's attached, stored as AttribDict in in tr.stats.gmparam
+    csvfile
+    stvel - stream of data corrected to velocity with pga's, pgv's and psa's attached, stored as AttribDict in in tr.stats.gmparam
+    """
+    from obspy.core import AttribDict
+
+    st.detrend('demean')
+    st.detrend('linear')
+    st.taper(max_percentage=0.05, type='cosine')
+    try:
+        st = attach_coords_IRIS(st)  # Attach lats and lons if available
+    except:
+        print('Could not attach lats and lons, continuing')
+
+    stacc = st.copy()
+    # Build place to store gm parameters
+    for trace in stacc:
+        trace.stats.gmparam = AttribDict()
+
+    try:
+        stacc.remove_response(output='ACC', pre_filt=cosfilt, water_level=water_level)
+    except:
+        print('Failed to do bulk station correction, trying one at a time')
+        stacc = st.copy()  # Start with fresh data
+        removeid = []
+        for trace in stacc:
+            try:
+                trace.remove_response(output='ACC', pre_filt=cosfilt, water_level=water_level)
+            except:
+                print 'Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)
+                removeid.append(trace.id)
+        for rmid in removeid:  # Delete uncorrected ones
+            for tr in stacc.select(id=rmid):
+                stacc.remove(tr)
+
+    stvel = st.copy()
+    # Build place to store gm parameters
+    for trace in stvel:
+        trace.stats.gmparam = AttribDict()
+    try:
+        stvel.remove_response(output='VEL', pre_filt=cosfilt, water_level=water_level)
+    except:
+        print('Failed to do bulk station correction, trying one at a time')
+        stvel = st.copy()  # Start with fresh data
+        removeid = []
+        for trace in stvel:
+            try:
+                trace.remove_response(output='VEL', pre_filt=cosfilt, water_level=water_level)
+            except:
+                print 'Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)
+                removeid.append(trace.id)
+        for rmid in removeid:  # Delete uncorrected ones
+            for tr in stvel.select(id=rmid):
+                stvel.remove(tr)
+
+    if pga is True:
+        for j, trace in enumerate(stacc):
+            trace.stats.gmparam['pga'] = trace.max()  # in obspy, max gives the max absolute value of the data
+            stvel[j].stats.gmparam['pga'] = trace.max()
+            print('%s - PGA = %1.3f m/s') % (tr.id, trace.max())
+
+    if pgv is True:
+        for j, trace in enumerate(stvel):
+            trace.stats.gmparam['pgv'] = trace.max()
+            stacc[j].stats.gmparam['pga'] = trace.max()
+            print('%s - PGV = %1.3f m/s') % (tr.id, trace.max())
+
+    if psa is True:
+        for j, tr in enumerate(stacc):
+            out = []
+            for T in periods:
+                freq = 1.0/T
+                omega = (2 * 3.14159 * freq) ** 2
+                paz_sa = cornFreq2Paz(freq, damp=damping)
+                paz_sa['sensitivity'] = omega
+                paz_sa['zeros'] = []
+                dd = seisSim(tr.data, tr.stats.sampling_rate, paz_remove=None, paz_simulate=paz_sa,
+                             taper=True, simulate_sensitivity=True, taper_fraction=0.05)
+                if abs(max(dd)) >= abs(min(dd)):
+                    psa = abs(max(dd))
+                else:
+                    psa = abs(min(dd))
+                out.append(psa)
+                print('%s - PSA at %1.1f sec = %1.3f m/s^2') % (tr.id, T, psa)
+            tr.stats.gmparam['periods'] = periods
+            tr.stats.gmparam['psa'] = out
+            stvel[j].stats.gmparam['periods'] = periods
+            stvel[j].stats.gmparam['psa'] = out
+
+    if csvfile is not None:
+        import csv
+        with open('csvfile', 'wb') as csvfile1:
+            writer = csv.writer(csvfile1)
+            writer.writerow([' ']+[tr.id for tr in st])
+            if pga is True:
+                writer.writerow(['PGA (m/s^2)']+[tr.stats.gmparam['pga'] for tr in stacc])
+            if pgv is True:
+                writer.writerow(['PGV (m/s)']+[tr.stats.gmparam['pgv'] for tr in stvel])
+            if psa is True:
+                for k, period in enumerate(periods):
+                    writer.writerow(['PSA (m/s^2) at %1.1f sec, %1.1f damping' % (period, damping)]+[tr.stats.gmparam['psa'][k] for tr in stacc])
+
+    return stacc, stvel
 
 
 def unique_list(seq):  # make a list only contain unique values and keep their order

@@ -48,7 +48,7 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
     st_ordered - ObsPy stream object that is in the same order as input station list
     """
     #create directory if need be
-    if not os.path.exists(folderdat):
+    if not os.path.exists(folderdat) and savedat is True:
         os.makedirs(folderdat)
     #create file name
     #filename = filenamepref+str(t1)+str(t2)
@@ -1574,7 +1574,13 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
         import csv
         with open(csvfile, 'wb') as csvfile1:
             writer = csv.writer(csvfile1)
-            writer.writerow([' ']+[tr.id for tr in st])
+            writer.writerow(['Id']+[tr.id for tr in st])
+            try:
+                test = [tr.stats.coordinates['latitude'] for tr in st]
+                writer.writerow(['Lat']+[tr.stats.coordinates['latitude'] for tr in st])
+                writer.writerow(['Lon']+[tr.stats.coordinates['longitude'] for tr in st])
+            except:
+                print('Could not print out lats/lons to csvfile')
             if pga is True:
                 writer.writerow(['PGA (m/s^2)']+[tr.stats.gmparam['pga'] for tr in stacc])
             if pgv is True:

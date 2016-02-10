@@ -295,6 +295,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
     OUTPUTS
     st = obspy stream containing data from within requested area
     """
+    event_time = UTCDateTime(event_time)
     if source == 'NCEDC':
         lines, source = get_stations_ncedc(event_lat, event_lon, event_time, minradiuskm=minradiuskm, maxradiuskm=maxradiuskm, chan=('???'))
         lines = lines[:-1]
@@ -304,7 +305,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
     netnames = unique_list([line[0] for line in lines])
     stanames = unique_list([line[1] for line in lines])
     if channels.lower() == 'strong motion':
-        channels = 'EN?,HN?,BN?,EL?,HL?,EL?'
+        channels = 'EN?,HN?,BN?,EL?,HL?,BL?'
     elif channels.lower() == 'broadband':
         channels = 'BH?,HH?'
     elif channels.lower() == 'short period':
@@ -1458,7 +1459,7 @@ def get_stations_ncedc(event_lat, event_lon, event_time, minradiuskm=0., maxradi
     return lines, source
 
 
-def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=0.05, cosfilt=None, water_level=60., csvfile=None):
+def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=0.05, cosfilt=None, water_level=60., csvfile=None, verbal=False):
     """
     Performs station correction (st must have response info attached to it) - removes trends and tapers with 5 percent cosine taper before doing station correction, adds as field in st and prints out results, option to save csv file
     All values in m/s and/or m/s**2
@@ -1474,6 +1475,7 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
     cosfilt - tuple of four corners, in Hz, for cosine filter to use in station correction. None for no cosine filter
     water_level - water level to use in station correction
     csvfile - full file path of csvfile to output with results, None if don't want to output csvfile
+    verbal - if True, will print out all results to screen
 
     OUTPUTS
     stacc - stream of data corrected to acceleration with pga's, pgv's and psa's attached, stored as AttribDict in in tr.stats.gmparam
@@ -1533,18 +1535,20 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
 
     if pga is True:
         for j, trace in enumerate(stacc):
-            trace.stats.gmparam['pga'] = trace.max()  # in obspy, max gives the max absolute value of the data
-            stvel[j].stats.gmparam['pga'] = trace.max()
-            print('%s - PGA = %1.3f m/s') % (tr.id, trace.max())
+            trace.stats.gmparam['pga'] = np.abs(trace.max())  # in obspy, max gives the max absolute value of the data
+            stvel[j].stats.gmparam['pga'] = np.abs(trace.max())
+            if verbal is True:
+                print('%s - PGA = %1.3f m/s') % (trace.id, np.abs(trace.max()))
 
     if pgv is True:
         for j, trace in enumerate(stvel):
-            trace.stats.gmparam['pgv'] = trace.max()
-            stacc[j].stats.gmparam['pga'] = trace.max()
-            print('%s - PGV = %1.3f m/s') % (tr.id, trace.max())
+            trace.stats.gmparam['pgv'] = np.abs(trace.max())
+            stacc[j].stats.gmparam['pgv'] = np.abs(trace.max())
+            if verbal is True:
+                print('%s - PGV = %1.3f m/s') % (trace.id, np.abs(trace.max()))
 
     if psa is True:
-        for j, tr in enumerate(stacc):
+        for j, trace in enumerate(stacc):
             out = []
             for T in periods:
                 freq = 1.0/T
@@ -1552,22 +1556,23 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
                 paz_sa = cornFreq2Paz(freq, damp=damping)
                 paz_sa['sensitivity'] = omega
                 paz_sa['zeros'] = []
-                dd = seisSim(tr.data, tr.stats.sampling_rate, paz_remove=None, paz_simulate=paz_sa,
+                dd = seisSim(trace.data, trace.stats.sampling_rate, paz_remove=None, paz_simulate=paz_sa,
                              taper=True, simulate_sensitivity=True, taper_fraction=0.05)
                 if abs(max(dd)) >= abs(min(dd)):
-                    psa = abs(max(dd))
+                    psa1 = abs(max(dd))
                 else:
-                    psa = abs(min(dd))
-                out.append(psa)
-                print('%s - PSA at %1.1f sec = %1.3f m/s^2') % (tr.id, T, psa)
-            tr.stats.gmparam['periods'] = periods
-            tr.stats.gmparam['psa'] = out
+                    psa1 = abs(min(dd))
+                out.append(psa1)
+                if verbal is True:
+                    print('%s - PSA at %1.1f sec = %1.3f m/s^2') % (trace.id, T, psa1)
+            trace.stats.gmparam['periods'] = periods
+            trace.stats.gmparam['psa'] = out
             stvel[j].stats.gmparam['periods'] = periods
             stvel[j].stats.gmparam['psa'] = out
 
     if csvfile is not None:
         import csv
-        with open('csvfile', 'wb') as csvfile1:
+        with open(csvfile, 'wb') as csvfile1:
             writer = csv.writer(csvfile1)
             writer.writerow([' ']+[tr.id for tr in st])
             if pga is True:
@@ -1576,7 +1581,7 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
                 writer.writerow(['PGV (m/s)']+[tr.stats.gmparam['pgv'] for tr in stvel])
             if psa is True:
                 for k, period in enumerate(periods):
-                    writer.writerow(['PSA (m/s^2) at %1.1f sec, %1.1f damping' % (period, damping)]+[tr.stats.gmparam['psa'][k] for tr in stacc])
+                    writer.writerow(['PSA (m/s^2) at %1.1f sec, %1.0fpc damping' % (period, 100*damping)]+[tr.stats.gmparam['psa'][k] for tr in stacc])
 
     return stacc, stvel
 

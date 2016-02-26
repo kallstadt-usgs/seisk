@@ -554,18 +554,30 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
         halfbin_freq = (freq[1] - freq[0]) / 2.0
         extent = (time[0] - halfbin_time, time[-1] + halfbin_time,
                   freq[0] - halfbin_freq, freq[-1] + halfbin_freq)
-        if st1.stats.channel in 'BHZ,BHN,BHE,HHN,HHE,HHZ':
+        if st1.stats.channel in 'BHZ,BHN,BHE,HHN,HHE,HHZ' and maxPower is not None and minPower is not None:
             maxP = maxPower*100
             minP = minPower*100
         else:
             maxP = maxPower
             minP = minPower
+
+        if maxPower is None or minPower is None:
+            vmin = None
+            vmax = None
+        else:
+            vmin = minP
+            vmax = maxP
+
+        if log1 is True and maxPower is not None and minPower is not None:
+            vmin = np.log10(minP)
+            vmax = np.log10(maxP)
+
         if log1 is True:
             im = axes[i].imshow(np.log10(Pxx), interpolation="nearest", extent=extent,
-                                vmin=np.log10(minP), vmax=np.log10(maxP))
+                                vmin=vmin, vmax=vmax)
         else:
             im = axes[i].imshow(Pxx, interpolation="nearest", extent=extent,
-                                vmin=minP, vmax=maxP)
+                                vmin=vmin, vmax=vmax)
         axes[i].axis('tight')
         axes[i].grid(True)
         axes[i].set_ylim([0, freqmax])
@@ -573,7 +585,7 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
     plt.subplots_adjust(hspace=0)  # no vertical space between plots
     plt.setp([a.get_xticklabels() for a in fig.axes[:-1]], visible=False)
     plt.xlabel('Time (sec)')
-    if colorb is True:
+    if colorb is True and maxPower is not None and minPower is not None:
         plt.subplots_adjust(right=0.8)  # make room for colorbar
         cbar_ax = fig.add_axes([0.85, 0.15, 0.03, 0.7])
         fig.colorbar(im, cax=cbar_ax)
@@ -584,7 +596,7 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
 class InteractivePlot:
     """
     Class for interactive plotting using recsec
-    USAGE - need to have open recsec plot to start with:
+    USAGE:
     zp = reviewData.InteractivePlot(st, fig=None, indfirst=0, maxtraces=10, cosfilt=(0.01, 0.02, 20., 30.), water_level=60, output='VEL')
 
     INPUTS
@@ -607,9 +619,6 @@ class InteractivePlot:
     Make picking phases a width of uncertainty rather than weight
     Use RectangleSelector widget to zoom
     Backspace functionality for inputs
-    Faster plotting - use min max plot of ObsPy
-    Option for saving image (without text box)
-    Page down option instead of scrolling down only one at a time
     Interactively editable spectrogram options
     Fix Box zooming
     Make axis change from seconds to minutes or hours as needed

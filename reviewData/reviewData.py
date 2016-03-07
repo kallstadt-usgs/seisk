@@ -42,7 +42,7 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
     savedat - True or False, save data locally so it doesn't need to be redownloaded to look at it again
     folderdat - folder in which to save data, if you save it
     filenamepref - prefix for filename, if you are saving data
-    clientname - source of data from webservices: 'IRIS','NCEDC'
+    clientname - source of data from FDSN webservices: 'IRIS','NCEDC', 'GEONET' etc. - see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
     loadfromfile - True or False - if a file from this time period is already on the computer, if you say True, it will automatically use that file without asking if you want to use it
 
     OUTPUTS
@@ -292,7 +292,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
     radiuskm = radius to search for data
     channels = 'strong motion' to get all strong motion channels (excluding low sample rate ones), 'broadband' to get all broadband instruments, 'short period' for all short period channels, otherwise a single line of comma separated channel codes, * wildcards are okay, e.g. channels = '*N*,*L*'
     location = comma separated list of location codes allowed, or '*' for all location codes
-    source = FDSN source, 'IRIS', 'NCEDC', 'GEONET' etc.
+    source = FDSN source, 'IRIS', 'NCEDC', 'GEONET' etc., see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
 
     OUTPUTS
     st = obspy stream containing data from within requested area

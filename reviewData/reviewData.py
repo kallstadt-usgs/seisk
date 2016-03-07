@@ -9,6 +9,7 @@ from obspy.signal.invsim import seisSim, cornFreq2Paz
 from obspy import UTCDateTime
 import numpy as np
 import obspy.signal.filter as filte
+from obspy.core import AttribDict
 import os
 from textwrap import wrap
 import urllib2
@@ -279,44 +280,53 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
 
 def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiuskm=0., maxradiuskm=20., channels='*', location='*', source='IRIS'):
     """
-    Automatically pull existing data within a certain distance of the epicenter (or any lat/lon coordinates)
+    Automatically pull existing data within a certain distance of the epicenter (or any lat/lon coordinates) and attach station coordinates to data
     USAGE
+    st = getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiuskm=0., maxradiuskm=20., channels='*', location='*', source='IRIS')
     INPUTS
     event_lat = latitude of event in decimal degrees
     event_lon = longitude of event in decimal degrees
     event_time = Event time in UTC in any format obspy's UTCDateTime can parse - e.g. '2016-02-05T19:57:26'
-    tminus = number of seconds to add from event time for start time of data (use negative number to start before event_time)
-    tplus = number of seconds to add to event time for end time of data
+    tstart = number of seconds to add to event time for start time of data (use negative number to start before event_time)
+    tend = number of seconds to add to event time for end time of data
     radiuskm = radius to search for data
-    channels = 'strong motion' to get all strong motion channels (excluding low sample rate ones), 'broadband' to get all broadband instruments, 'short period' for all short period channels, otherwise a single line of comma separated channel codes, ? wildcards are okay, e.g. channels = '?N?,?L?'
+    channels = 'strong motion' to get all strong motion channels (excluding low sample rate ones), 'broadband' to get all broadband instruments, 'short period' for all short period channels, otherwise a single line of comma separated channel codes, * wildcards are okay, e.g. channels = '*N*,*L*'
     location = comma separated list of location codes allowed, or '*' for all location codes
-    source = 'IRIS' or 'NCEDC'
+    source = FDSN source, 'IRIS', 'NCEDC', 'GEONET' etc.
 
     OUTPUTS
     st = obspy stream containing data from within requested area
     """
     event_time = UTCDateTime(event_time)
-    if source == 'NCEDC':
-        lines, source = get_stations_ncedc(event_lat, event_lon, event_time, minradiuskm=minradiuskm, maxradiuskm=maxradiuskm, chan=('???'))
-        lines = lines[:-1]
-    else:
-        lines, source = get_stations_iris(event_lat, event_lon, event_time, minradiuskm=minradiuskm, maxradiuskm=maxradiuskm, chan=('???'))
-        lines = lines[:-1]
-    netnames = unique_list([line[0] for line in lines])
-    stanames = unique_list([line[1] for line in lines])
+    client = FDSN_Client(source)
+
     if channels.lower() == 'strong motion':
-        channels = 'EN?,HN?,BN?,EL?,HL?,BL?'
+        channels = 'EN*,HN*,BN*,EL*,HL*,BL*'
     elif channels.lower() == 'broadband':
-        channels = 'BH?,HH?'
+        channels = 'BH*,HH*'
     elif channels.lower() == 'short period':
-        channels = 'EH?'
+        channels = 'EH*'
     else:
         channels = channels.replace(' ', '')  # Get rid of spaces
 
     t1 = UTCDateTime(event_time) + tstart
     t2 = UTCDateTime(event_time) + tend
 
+    inventory = client.get_stations(latitude=event_lat, longitude=event_lon, minradius=minradiuskm/111.32, maxradius=maxradiuskm/111.32, channel=channels, level='channel', startbefore=t1, endafter=t2)
+    temp = inventory.get_contents()
+    netnames = temp['networks']
+    stas = temp['stations']
+    stanames = [n.split('.')[1].split()[0] for n in stas]
+
     st = getdata(','.join(unique_list(netnames)), ','.join(unique_list(stanames)), location, channels, t1, t2, attach_response=True, clientname=source)
+
+    for trace in st:
+        try:
+            coord = inventory.get_coordinates(trace.id)
+            trace.stats.coordinates = AttribDict({'latitude': coord['latitude'], 'longitude': coord['longitude'], 'elevation': coord['elevation']})
+        except:
+            print('Could not attach coordinates for %s' % trace.id)
+
     return st
 
 
@@ -1389,7 +1399,6 @@ def attach_coords_IRIS(st):
     """
     attach coordinates to stations in Stream st by getting info from IRIS
     """
-    from obspy.core import AttribDict
     for trace in st:
         # build the url use to get station info from IRIS webservices
         if trace.stats.location == '':
@@ -1496,10 +1505,13 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
     st.detrend('demean')
     st.detrend('linear')
     st.taper(max_percentage=0.05, type='cosine')
-    try:
-        st = attach_coords_IRIS(st)  # Attach lats and lons if available
-    except:
-        print('Could not attach lats and lons, continuing')
+
+    # If coordinates aren't already attached, try to attach from IRIS
+    if 'coordinates' not in st[0].stats:
+        try:
+            st = attach_coords_IRIS(st)  # Attach lats and lons if available
+        except:
+            print('Could not attach lats and lons, continuing')
 
     stacc = st.copy()
     # Build place to store gm parameters

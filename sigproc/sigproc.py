@@ -284,7 +284,7 @@ def kurtosis(st, winlen, BaillCF=False):
             F3 = np.zeros(len(kurtos))
             for j in range(1, len(kurtos)):
                 F3[j] = F2[j]-((a*(j-1))+b)
-            [M, mintab] = sigproc.peakdet(F3, (np.max(F3)-np.min(F3))/100.)
+            [M, mintab] = peakdet(F3, (np.max(F3)-np.min(F3))/100.)
             F4 = np.zeros(len(kurtos))
             indx = M[1:-1, 0]
             # This takes a long time - figure out why

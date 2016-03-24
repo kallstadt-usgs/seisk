@@ -564,7 +564,7 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
         halfbin_freq = (freq[1] - freq[0]) / 2.0
         extent = (time[0] - halfbin_time, time[-1] + halfbin_time,
                   freq[0] - halfbin_freq, freq[-1] + halfbin_freq)
-        if st1.stats.channel in 'BHZ,BHN,BHE,HHN,HHE,HHZ' and maxPower is not None and minPower is not None:
+        if st1.stats.channel in 'BHZ,BHN,BHE,HHN,HHE,HHZ,HH1,HH2,BH1,BH2' and maxPower is not None and minPower is not None:
             maxP = maxPower*100
             minP = minPower*100
         else:

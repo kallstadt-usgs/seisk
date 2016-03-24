@@ -1,0 +1,4 @@
+*.DS_Store
+*.pyc
+notebooks/*.ipynb_checkpoints
+*.csv

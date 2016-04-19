@@ -284,7 +284,7 @@ def kurtosis(st, winlen, BaillCF=False):
             F3 = np.zeros(len(kurtos))
             for j in range(1, len(kurtos)):
                 F3[j] = F2[j]-((a*(j-1))+b)
-            [M, mintab] = sigproc.peakdet(F3, (np.max(F3)-np.min(F3))/100.)
+            [M, mintab] = peakdet(F3, (np.max(F3)-np.min(F3))/100.)
             F4 = np.zeros(len(kurtos))
             indx = M[1:-1, 0]
             # This takes a long time - figure out why
@@ -419,11 +419,13 @@ def xcorrnorm(tr1, tr2):
     INPUTS
     tr1 - obspy trace1
     tr2 - obspy trace2
+    freqmin, freqmax - optional, restrict frequency range to [freqmin, freqmax]
+    lags = lag to compute if None, will compute all lags and find max,
 
     OUTPUTS
     maxcor - value of maximum correlation
     maxlag - lag of maximum correlation (in samples) - this is the number of samples to shift tr2 so it lines up with tr1
-    dt - time lag, in seconds
+    maxdt - time lag, in seconds
 
     TODO
     add option to only compute certain lags
@@ -455,8 +457,10 @@ def xcorrnorm(tr1, tr2):
 
     maxcor = cc[indx]
     maxlag = lags[indx]
-    dt = 1./tr1.stats.sampling_rate*maxlag
-    return maxcor, maxlag, dt
+    maxdt = 1./tr1.stats.sampling_rate*maxlag
+    tlags = 1./tr1.stats.sampling_rate*lags
+
+    return maxcor, maxlag, maxdt, cc, lags, tlags
 
 
 def circshift(tr, ind):

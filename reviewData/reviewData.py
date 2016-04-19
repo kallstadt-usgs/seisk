@@ -320,6 +320,10 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
 
     st = getdata(','.join(unique_list(netnames)), ','.join(unique_list(stanames)), location, channels, t1, t2, attach_response=True, clientname=source)
 
+    if st is None:
+        print('No data returned')
+        return
+
     for trace in st:
         try:
             coord = inventory.get_coordinates(trace.id)

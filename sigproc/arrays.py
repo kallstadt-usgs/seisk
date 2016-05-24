@@ -108,54 +108,60 @@ def extract_coords(st, inunits='m', outunits='km'):
     return coords, coordsys
 
 
-def plotarray(stcoord, inunits='m', plotunits='km', sourcecoords=None):
+def plotarray(stcoord, inunits='m', plotunits='km', sourcecoords=None, stalabels=None):
     """
     stcoord = stream or coords extracted in format from extract_coords
     sourcecoords = lat,lon or x,y (should be in same units as stcoord)
-
+    inunits 'm' 'km' or 'deg'
     """
-    if isinstance(stcoord, Stream):
-        trace1 = stcoord[0]
-        coords = []
-        tempcoords = []
-        if 'latitude' in trace1.stats.coordinates:
-            for trace in stcoord:
-                tempcoords.append(np.array([trace.stats.coordinates.longitude, trace.stats.coordinates.latitude, trace.stats.coordinates.elevation]))
-            tempcoords = np.array(tempcoords)
-            lons = np.array([coord[0] for coord in tempcoords])
-            lats = np.array([coord[1] for coord in tempcoords])
-            for coord in tempcoords:
-                x, y = utlGeoKm(lons.min(), lats.min(), coord[0], coord[1])
-                coords.append(np.array([x, y, coord[2]]))
-            if plotunits == 'm':
-                coords = np.array(coords)*1000.
-            else:
-                coords = np.array(coords)
-            if sourcecoords is not None:
-                sx, sy = utlGeoKm(lons.min(), lats.min(), sourcecoords[0], sourcecoords[1])
-        elif 'x' in trace.stats.coordinates:
-            for trace in stcoord:
-                coords.append(np.array([trace.stats.coordinates.x, trace.stats.coordinates.y, trace.stats.coordinates.elevation]))
-            if inunits == 'm' and plotunits == 'km':
-                coords = np.array(coords)/1000.
-                if sourcecoords is not None:
-                    sx, sy = sourcecoords/1000.
-            elif inunits == 'km' and plotunits == 'm':
-                coords = np.array(coords)*1000.
-                if sourcecoords is not None:
-                    sx, sy = sourcecoords*1000.
-            else:
-                coords = np.array(coords)
-                if sourcecoords is not None:
-                    sx, sy = sourcecoords
-        else:
-            print('no coordinates found in stream')
-            return
+
+    coords = []
+    tempcoords = []
+
+    if type(stcoord) is Stream:
+        if stalabels is None:
+            stalabels = []
+        for trace in stcoord:
+            tempcoords.append(np.array([trace.stats.coordinates.longitude, trace.stats.coordinates.latitude, trace.stats.coordinates.elevation]))
+            stalabels.append(trace.stats.station)
+            if 'latitude' in trace.stats.coordinates:
+                inunits = 'deg'
     else:
-        coords = stcoord
+        tempcoords = stcoord
+    tempcoords = np.array(tempcoords)
+
+    if inunits == 'deg':
+        lons = np.array([coord[0] for coord in tempcoords])
+        lats = np.array([coord[1] for coord in tempcoords])
+        for coord in tempcoords:
+            x, y = utlGeoKm(lons.min(), lats.min(), coord[0], coord[1])
+            coords.append(np.array([x, y, coord[2]]))
+        if plotunits == 'm':
+            coords = np.array(coords)*1000.
+        else:
+            coords = np.array(coords)
+        if sourcecoords is not None:
+            sx, sy = utlGeoKm(lons.min(), lats.min(), sourcecoords[0], sourcecoords[1])
+
+    elif inunits == 'm' and plotunits == 'km':
+        coords = np.array(coords)/1000.
+        if sourcecoords is not None:
+            sx, sy = sourcecoords/1000.
+    elif inunits == 'km' and plotunits == 'm':
+        coords = np.array(coords)*1000.
+        if sourcecoords is not None:
+            sx, sy = sourcecoords*1000.
+    else:
+        coords = np.array(coords)
+        if sourcecoords is not None:
+            sx, sy = sourcecoords
+
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax.plot([coord[0] for coord in coords], [coord[1] for coord in coords], 'o')
+    if stalabels is not None:
+        for coord, sta in zip(coords, stalabels):
+            ax.text(coord[0], coord[1], sta, fontsize=8)
     if sourcecoords is not None:
         ax.plot(sx, sy, '*k', markersize=20)
         xcenter = np.array([coord[0] for coord in coords]).mean()

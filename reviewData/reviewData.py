@@ -113,6 +113,77 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
     return st_ordered
 
 
+def getdata_exact(stations, t1, t2, attach_response=True,
+                  savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
+                  loadfromfile=False, reloadfile=False):
+    """
+    Same as getdata, but only gets exact station channel combos specified instead of grabbling all (takes longer)
+    Get data from IRIS (or NCEDC) if it exists, save it
+    USAGE
+    st = getdata(network, station, location, channel, t1, t2, attach_response=True,
+            savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
+            loadfromfile=False)
+
+    INPUTS
+    stations = list of tuples in form '[(station,channel,network,loc),]', network, channel and loc can be *
+    t1 - UTCDateTime(starttime)
+    t2 - UTCDateTime(endtime)
+    attach_response - attach station response info?
+    savedat - True or False, save data locally so it doesn't need to be redownloaded to look at it again
+    folderdat - folder in which to save data, if you save it
+    filenamepref - prefix for filename, if you are saving data
+    clientname - source of data from FDSN webservices: 'IRIS','NCEDC', 'GEONET' etc. - see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
+    loadfromfile - True or False - if a file from this time period is already on the computer, if you say True, it will automatically use that file without asking if you want to use it
+
+    OUTPUTS
+    st_ordered - ObsPy stream object that is in the same order as input station list
+    """
+    #create directory if need be
+    if not os.path.exists(folderdat) and savedat is True:
+        os.makedirs(folderdat)
+    #create file name
+    #filename = filenamepref+str(t1)+str(t2)
+    filename = filenamepref+t1.strftime('%Y-%m-%dT%H%M')+'_'+t2.strftime('%Y-%m-%dT%H%M')
+    #see if it exists already
+    if os.path.exists(folderdat+'/'+filename):
+        if loadfromfile is True:
+            choice = 'Y'
+        else:
+            if reloadfile is False:
+                choice = raw_input('file already exists for this time period, enter Y to load from file, N to reload\n')
+            else:
+                choice = 'N'
+    else:
+        choice = 'N'
+    if choice.upper() == 'Y':
+        st = read(folderdat+'/'+filename, format='PICKLE')
+    else:
+        st = Stream()
+        try:
+            client = FDSN_Client(clientname)
+            for statup in stations:
+                try:
+                    sttemp = client.get_waveforms(statup[2], statup[0], statup[3], statup[1],
+                                                  t1, t2, attach_response=True)
+                    sttemp.merge(fill_value='interpolate')
+                    st += sttemp.copy()
+                except Exception as e:
+                        print e
+                        print('failed to grab data from %s, moving on') % (statup,)
+            st.detrend('linear')
+            #find min start time
+            mint = min([trace.stats.starttime for trace in st])
+            st.trim(starttime=mint, pad=True, fill_value=0)
+        except Exception as e:
+            print e
+            return
+
+        #save files
+        if savedat:
+            st.write(folderdat+'/'+filename, format="PICKLE")
+    return st
+
+
 def getdata_winston(stations, okchannels, t1, t2, attach_response=True,
                     savedat=False, folderdat='data', filenamepref='Data_',
                     clientname='products01.ess.washington.edu', port=16017,

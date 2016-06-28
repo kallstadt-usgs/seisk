@@ -886,7 +886,6 @@ class InteractivePlot:
                     print(temp)
                     self.print1.append('> '+temp)
                     self.numflag = 'PW'
-                    print self.numflag
                 except:
                     temp = 'Failed, resetting1'
                     self.number = ''

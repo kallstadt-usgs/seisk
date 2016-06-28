@@ -882,12 +882,13 @@ class InteractivePlot:
                     self.input1 = float(self.number)
                     self.number = ''
                     self.pweight = self.input1
-                    temp = ('Pick of %s phase at %s at %f sec weighted as %i, hit Y to keep it'
-                            % (self.phasep, self.picksta, self.picktime, self.pweight))
+                    temp = ('Pick of %s phase at %s at %f sec weighted as %i, hit Y to keep it' % (self.phasep, self.picksta, self.picktime, self.pweight))
                     print(temp)
                     self.print1.append('> '+temp)
+                    self.numflag = 'PW'
+                    print self.numflag
                 except:
-                    temp = 'Failed, resetting'
+                    temp = 'Failed, resetting1'
                     self.number = ''
                     self.numflag = None
                     print(temp)
@@ -1311,12 +1312,10 @@ class InteractivePlot:
             #update = False
             self.deleted = []  # resetting data also resets those that were deleted
 
-        if event.key.upper() == 'Y' and self.numflag == 'P':
+        if event.key.upper() == 'Y' and self.numflag == 'PW':
             self.numflag = None
             #save the pick in adictionary, use UTCDateTime to add seconds to start time of st
-            self.picks[self.picknumber] = {'stachan': self.picksta,
-                                           'picktime': self.st[0].stats.starttime + self.picktime,
-                                           'phase': self.phasep, 'weight': self.pweight}
+            self.picks[self.picknumber] = {'stachan': self.picksta, 'picktime': self.st[0].stats.starttime + self.picktime, 'phase': self.phasep, 'weight': self.pweight}
             self.picknumber += 1
             self.phasep = None
             self.ptime = 0
@@ -1338,7 +1337,7 @@ class InteractivePlot:
                     self.print1.append('> '+temp)
                     redraw = True
 
-        if event.key.upper() == 'N' and self.numflag == 'P':
+        if event.key.upper() == 'N' and self.numflag == 'PW':
             temp = 'deleting pick'
             print(temp)
             self.print1.append('> '+temp)

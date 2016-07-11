@@ -414,18 +414,22 @@ def nextpow2(val):
 def xcorrnorm(tr1, tr2):
     """
     Compute normalized cross correlation of two traces
-    maxcor, maxlag, dt = xcorr1x1(tr1, tr2)
+    maxcor, maxlag, maxdt, cc, lags, tlags = xcorr1x1(tr1, tr2)
 
     INPUTS
     tr1 - obspy trace1
     tr2 - obspy trace2
+    NOT IMPLEMENTED YET
     freqmin, freqmax - optional, restrict frequency range to [freqmin, freqmax]
     lags = lag to compute if None, will compute all lags and find max,
 
     OUTPUTS
     maxcor - value of maximum correlation
     maxlag - lag of maximum correlation (in samples) - this is the number of samples to shift tr2 so it lines up with tr1
-    maxdt - time lag, in seconds
+    maxdt - time lag of max lag, in seconds
+    cc - cross correlation value at each shift
+    lags - lag at each cc value in samples
+    tlags - lag at each cc value in seconds
 
     TODO
     add option to only compute certain lags

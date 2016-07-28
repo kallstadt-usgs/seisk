@@ -122,10 +122,12 @@ def plotarray(stcoord, inunits='m', plotunits='km', sourcecoords=None, stalabels
         if stalabels is None:
             stalabels = []
         for trace in stcoord:
-            tempcoords.append(np.array([trace.stats.coordinates.longitude, trace.stats.coordinates.latitude, trace.stats.coordinates.elevation]))
-            stalabels.append(trace.stats.station)
-            if 'latitude' in trace.stats.coordinates:
-                inunits = 'deg'
+            if inunits == 'deg':
+                tempcoords.append(np.array([trace.stats.coordinates.longitude, trace.stats.coordinates.latitude, trace.stats.coordinates.elevation]))
+                stalabels.append(trace.stats.station)
+            else:
+                tempcoords.append(np.array([trace.stats.coordinates.x, trace.stats.coordinates.y, trace.stats.coordinates.elevation]))
+                stalabels.append(trace.stats.station)
     else:
         tempcoords = stcoord
     tempcoords = np.array(tempcoords)
@@ -144,15 +146,15 @@ def plotarray(stcoord, inunits='m', plotunits='km', sourcecoords=None, stalabels
             sx, sy = utlGeoKm(lons.min(), lats.min(), sourcecoords[0], sourcecoords[1])
 
     elif inunits == 'm' and plotunits == 'km':
-        coords = np.array(coords)/1000.
+        coords = np.array(tempcoords)/1000.
         if sourcecoords is not None:
             sx, sy = sourcecoords/1000.
     elif inunits == 'km' and plotunits == 'm':
-        coords = np.array(coords)*1000.
+        coords = np.array(tempcoords)*1000.
         if sourcecoords is not None:
             sx, sy = sourcecoords*1000.
     else:
-        coords = np.array(coords)
+        coords = np.array(tempcoords)
         if sourcecoords is not None:
             sx, sy = sourcecoords
 
@@ -379,7 +381,8 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh, win
             ax.pcolormesh(baz2, slow2, pow_map, vmin=0., vmax=1., cmap=cmap)
             ax.set_theta_direction(-1)
             ax.set_theta_zero_location('N')
-            ax.set_ylim(0, np.sqrt(slm_x**2 + slm_y**2))
+            #ax.set_ylim(0, np.sqrt(slm_x**2 + slm_y**2))
+            ax.set_ylim(0, np.max([slm_x, slm_y]))
 
             ix, iy = np.unravel_index(pow_map.argmax(), pow_map.shape)
             az = 180 * math.atan2(xgrid[ix], ygrid[iy]) / math.pi
@@ -396,20 +399,20 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh, win
             ColorbarBase(cax, cmap=cmap, norm=Normalize(vmin=0.0, vmax=1.))
             ax1 = fig.add_axes([0.37, 0.05, 0.58, 0.9])
             tvec = sigproc.maketvec(stfilt[0])
+            #import pdb; pdb.set_trace()
             ax1.plot(tvec, stfilt[0].data/max(stfilt[0].data), 'k', label=stfilt[0].stats.station)
             ax1.plot(tvec, stfilt[1].data/max(stfilt[1].data) + 1.5, 'k', label=stfilt[1].stats.station)
             ax1.plot(tvec, stfilt[2].data/max(stfilt[2].data) + 3., 'k', label=stfilt[2].stats.station)
-            # SEEMS TO BE A BUG SOMEWHERE THAT SHIFTS t BY ONE DAY, TEMPORARY FIX HERE
-            sec = UTCDateTime(mdates.num2date(t1+1.))-stfilt[0].stats.starttime
+            sec = UTCDateTime(mdates.num2date(t1))-stfilt[0].stats.starttime
             ax1.vlines(sec, -1, 4, color='r')
             ax1.vlines(sec + win_len, -1, 4, color='r')
             plt.title('Max at %3.0f degrees, speed of %1.1f km/s - tstart %1.0f' % (baz[i], 1/slow[i], sec))
             ax1.set_ylim(-1, 4)
             plt.savefig(('%s/img%03d.png') % (outfolder, i))
             findind += int(win_len*st[0].stats.sampling_rate*win_frac)
-            plt.draw()
+            #plt.draw()
+            plt.show()
             plt.close(fig)
-            #plt.show()
 
         #turn into mpg
         origdir = os.getcwd()

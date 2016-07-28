@@ -3,8 +3,8 @@
 from obspy import read, Stream
 import matplotlib.pyplot as plt
 from matplotlib import mlab
-from obspy.fdsn import Client as FDSN_Client
-from obspy.earthworm import Client as ew_client
+from obspy.clients.fdsn import Client as FDSN_Client
+from obspy.clients.earthworm import Client as ew_client
 from obspy.signal.invsim import seisSim, cornFreq2Paz
 from obspy import UTCDateTime
 import numpy as np
@@ -340,6 +340,7 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
                     print('%s would not merge - deleting it') % (sta,)
             st = st_new
         if starttime or endtime:
+            st.detrend('demean')
             st.trim(starttime=starttime, endtime=endtime, pad=True, fill_value=0)
         else:  # find min start time and trim all to same point
             mint = min([trace.stats.starttime for trace in st])

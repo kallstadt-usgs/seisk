@@ -3,8 +3,8 @@
 from obspy import read, Stream
 import matplotlib.pyplot as plt
 from matplotlib import mlab
-from obspy.fdsn import Client as FDSN_Client
-from obspy.earthworm import Client as ew_client
+from obspy.clients.fdsn import Client as FDSN_Client
+from obspy.clients.earthworm import Client as ew_client
 from obspy.signal.invsim import seisSim, cornFreq2Paz
 from obspy import UTCDateTime
 import numpy as np

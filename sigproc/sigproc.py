@@ -411,7 +411,7 @@ def nextpow2(val):
     pass
 
 
-def xcorrnorm(tr1, tr2):
+def xcorrnorm(tr1, tr2, pad=True):
     """
     Compute normalized cross correlation of two traces
     maxcor, maxlag, maxdt, cc, lags, tlags = xcorr1x1(tr1, tr2)
@@ -437,21 +437,27 @@ def xcorrnorm(tr1, tr2):
     """
     from scipy.fftpack import fft, ifft
     if tr1.stats.sampling_rate != tr2.stats.sampling_rate:
-        print 'tr1 and tr2 have different sampling rates, abort'
+        raise RuntimeError('tr1 and tr2 have different sampling rates')
         return
-    if len(tr1) != len(tr2):
-        print 'tr1 and tr2 are different lengths, abort'
-        return
-    # pad data to double number of samples to avoid wrap around and pad more to next closest power of 2 for fft
-    n2 = nextpow2(len(tr1))
-
     # make sure data is float
-    tr1.data = tr1.data*1.
-    tr2.data = tr2.data*1.
+    dat1 = tr1.data*1.
+    dat2 = tr2.data*1.
+    if len(tr1) != len(tr2):
+        if pad is True:
+            print('tr1 and tr2 have different lengths, padding with zeros')
+            if len(dat1) > len(dat2):
+                dat2 = np.lib.pad(dat2, (0, len(dat1)-len(dat2)), 'constant', constant_values=(0., 0.))
+            else:
+                dat1 = np.lib.pad(dat1, (0, len(dat2)-len(dat1)), 'constant', constant_values=(0., 0.))
+        else:
+            raise RuntimeError('tr1 and tr2 are different lengths, set pad=True if you want to proceed')
+            return
+    # pad data to double number of samples to avoid wrap around and pad more to next closest power of 2 for fft
+    n2 = nextpow2(len(dat1))
 
-    FFT1 = fft(tr1.data, n2)
+    FFT1 = fft(dat1, n2)
     norm1 = np.sqrt(np.real(ifft(FFT1*np.conj(FFT1), n2)))
-    FFT2 = fft(tr2.data, n2)
+    FFT2 = fft(dat2, n2)
     norm2 = np.sqrt(np.real(ifft(FFT2*np.conj(FFT2), n2)))
     cctemp = np.real(ifft(FFT1*np.conj(FFT2), n2))
     cc = cctemp/(norm1[0]*norm2[0])
@@ -465,6 +471,43 @@ def xcorrnorm(tr1, tr2):
     tlags = 1./tr1.stats.sampling_rate*lags
 
     return maxcor, maxlag, maxdt, cc, lags, tlags
+
+
+def templateXcorr(datastream, template):
+    """
+    Based off matlab function coralTemplateXcorr.m by Justin Sweet
+
+    """
+    if datastream.stats.sampling_rate != template.stats.sampling_rate:
+        raise RuntimeError('tr1 and tr2 have different sampling rates')
+        return
+    # make sure data is float
+    y = datastream.data*1.
+    x = template.data*1.
+
+    M = len(y)
+    N = len(x)
+
+    if len(y) < len(x):
+        raise RuntimeError('your template is longer than your datastream')
+        return
+
+    xy = np.correlate(y, x, 'valid')
+    x2 = np.sum(x**2.)
+    csy2 = np.pad(np.cumsum(y**2.), (1, 0), 'constant', constant_values=(0., 0.))
+
+    I = np.arange(0, M-N+1)
+    y2 = csy2[N+I] - csy2[I]
+
+    # # zero cross correlation when y2==0
+    # x2 = np.array(x2)
+    # y2 = np.array(y2)
+    # x2[y2 == 0.] = 0.
+    # y2[y2 == 0.] = 1.
+
+    xcorFunc = xy/np.sqrt(np.dot(x2, y2))
+    xcorLags = (np.linspace(0, (len(xy)-1)*1/datastream.stats.sampling_rate, num=len(xy)))
+    return xcorFunc, xcorLags
 
 
 def circshift(tr, ind):

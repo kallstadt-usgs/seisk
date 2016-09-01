@@ -33,7 +33,12 @@ def correlation_analysis(st, flow, fhigh, plotfit=True, plotdots=True):
     # ADD CHECK FOR COORDINATES
 
     rowlen = len(st)*(len(st)-1)/2
-    collen = len(flow)
+    if type(flow) is float:
+        collen = 1
+        flow = [flow]  # turn into lists so later iteration doesn't crash
+        fhigh = [fhigh]
+    else:
+        collen = len(flow)
     distkm = np.zeros((rowlen, collen))
     corr = distkm.copy()
     lagsec = distkm.copy()
@@ -237,7 +242,7 @@ def plotARF_k(coords, klim, kstep, coordsys='xy'):
     plt.show()
 
 
-def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh, win_len, stime=None, etime=None, win_frac=0.05, coordsys='xy', outfolder=None, movie=True, savemovieimg=False, plottype='slowaz', showplots=True, saveplots=False):
+def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh, win_len, stime=None, etime=None, win_frac=0.05, coordsys='xy', outfolder=None, movie=True, savemovieimg=False, plottype='slowaz', showplots=True, saveplots=False, plotlabel=''):
     """
     MAKE CHOICE TO USE Sx Sy or S A in PLOTTING
     plotype = 'slowaz' or 'wavenum'
@@ -340,8 +345,8 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh, win
     if showplots is True:
         plt.show()
     if saveplots is True:
-        fig1.savefig('%s/%s.png' % (outfolder, 'timeplot'))
-        fig2.savefig('%s/%s.png' % (outfolder, 'overallplot'))
+        fig1.savefig('%s/%s-%s.png' % (outfolder, 'timeplot', plotlabel))
+        fig2.savefig('%s/%s-%s.png' % (outfolder, 'overallplot', plotlabel))
 
     if movie:
         cmap = cm.RdYlBu
@@ -431,13 +436,69 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh, win
     return t, rel_power, abs_power, baz, slow
 
 
-def backproject():
-    pass
+def backproject(st, v, tshifts, flow, fhigh, winlen, overlap, gridx, gridy, gridz=None, starttime=None, endtime=None, coords=None, ds=False):
+    """
+    st should have coordinates embedded, if not, coords need to be supplied in teh form of ?
+    v, constant velocity to use to estimate travel times in half space set to None if tshifts are specified
+    tshifts, time shifts, in seconds, from each station to each grid point in format ?, set to None if using constant velocity
+    flow - lowest frequency to consider
+    fhigh - higher frequency to consider
+    gridxyz - grid of points to search over for backprojection
+    winlen - window length in seconds
+    overlap - amount to overlap windows from 0 (no overlap) to 1 (completely overlapped)
+    coords - station coordinates, if not embedded in stream, only need for mapping and for computing travel times, not required if tshifts are provided. Should be in form of dictionary {sta: (x,y,elev)}, be sure units are consistent between v and coords
+    ds - If true, will downsample to 1/(fhigh*2)
+    starttime - start time in UTC of analysis, if None, will use start time of st
+    endtime - same as above but end time
+    """
+    # Initial data processing
+    samprates = [trace.stats.sampling_rate for trace in st]
+    if np.mean(samprates) != samprates[0] and ds is False:
+        print('sample rates are not all equal, resampling to minimum sample rate')
+        st = st.resample(np.min(samprates))
+    if ds is True:
+        st = st.resample(1./(fhigh*2.))
+    dt = st[0].stats.sampling_rate
+    if starttime is None:
+        starttime = np.min([trace.stats.starttime for trace in st])
+    if endtime is None:
+        endtime = np.max([trace.stats.starttime for trace in st])
+    st.trim(starttime, endtime, pad=True)  # turns into masked array if needs to pad, might need to check if this breaks things
+
+    nsta = len(st)
+
+    # Pull out coords for later usage
+    sx = []
+    sy = []
+    selev = []
+    names = []
+    chan = []
+    if coords is None:
+        for trace in st:
+            sx.append(trace.stats.coordinates['x'])
+            sy.append(trace.stats.coordinates['y'])
+            selev.append(trace.stats.coordinates['elevation'])
+            names.append(trace.stats.station)
+            chan.append(trace.stats.channel)
+    else:
+        for trace in st:
+            sx.append(coords[trace.stats.station][0])
+            sy.append(coords[trace.stats.station][1])
+            selev.append(coords[trace.stats.station][2])
+            names.append(trace.stats.station)
+            chan.append(trace.stats.channel)
+
+    nwins = int((endtime-starttime)/(winlen*(1.-overlap))) - 3
+    incr = (1.-overlap)*winlen
+    stt = np.arange(0., incr*nwins, incr)
+
+
 
 
 def beamform_spherical(st, slim, sstep, freqlow, freqhigh, win_len, minbeampow, percdiv, stepdiv, Dmin, Dmax, Dstep, stime=None, etime=None, win_frac=0.05, outfolder=None, coordsys='xy', verbose=False):
     """
     Uses plane wave beamforming to approximate answer, then searches in finer grid around answer from that for spherical wave best solution
+    Almendros et al 1999 methods
     """
     if outfolder is None:
         outfolder = os.getcwd()

@@ -560,7 +560,6 @@ def fshift(x, s):
     """
     Fractional circular shift (for use in subsample xcorr)
 
-
     Based on code by Francois Bouffard 2005 fbouffar@gel.ulaval.ca -
     Francois' comments about it:
     "FSHIFT circularly shifts the elements of vector x by a (possibly

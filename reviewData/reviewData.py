@@ -406,7 +406,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
     return st
 
 
-def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None, showscale=False):
+def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None, showscale=False, figsize=None):
     """
     Plot record section of data from an obspy stream
     USAGE
@@ -426,6 +426,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     menu = Text of help menu to print, None for no help menu
     quickdraw = Uses obsPy's minmax plot method to make plotting much faster if there are more than 30 samples per pixel on the plot
     processing = True to show processing history, otherwise None
+    figsize = tuple of figure size in inches e.g., (10, 10) is 10x10inches, (width, height)
 
     OUTPUTS
     fig = handle of figure
@@ -441,7 +442,10 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     rep = rep[0:len(st)]
 
     if update is False:
-        fig = plt.figure(figsize=(12, min(10, 3*len(st))))
+        if figsize is None:
+            fig = plt.figure(figsize=(12, min(10, 3*len(st))))
+        else:
+            fig = plt.figure(figsize=figsize)
         if textbox is True:
             axbox = fig.add_axes([0.2, 0.05, 0.75, 0.1])
             ax = fig.add_axes([0.2, 0.2, 0.75, 0.75])  # left bottom width height
@@ -788,7 +792,9 @@ class InteractivePlot:
         + - page down
         - - page up
         @ - toggle quickdraw (default on, may be slow if you turn it off)
-        ! - save figure (without textbox)
+        ! - save figure (without textbox) using same dimensions of current figure
+        $ - make spectra
+        # - show or hide scale bars
         """
         if fig is None:
             self.fig = recsec(self.st_current, xlim=xlim,
@@ -922,13 +928,17 @@ class InteractivePlot:
                 redraw = True
             elif self.numflag == '!':
                 print('creating figure')
+                figsize = self.fig.get_size_inches()
+                textpos = self.axbox.get_position()
+                figsize = tuple([figsize[0], figsize[1] - textpos.height*figsize[1]])
                 figprint = recsec(self.st_current, xlim=np.sort(self.xlims[-2:]),
                                   ylim=ylims, scalfact=self.scalfact,
                                   update=False, fighandle=[],
                                   norm=self.normflag, indfirst=self.indfirst,
                                   maxtraces=self.maxtraces,
                                   menu=None, processing=None,
-                                  quickdraw=False, textbox=False)
+                                  quickdraw=False, textbox=False,
+                                  figsize=figsize)
                 figprint.savefig(self.number+'.png', format='png')
                 plt.close(figprint)
                 print('figure %s saved' % self.number)
@@ -938,7 +948,6 @@ class InteractivePlot:
         #keep track of numbers that are typed in an print them as they are typed in
         if self.numflag is not None:
             if self.numflag in '!,F,J,P,W,F1' and event.key != 'enter':
-                print event.key
                 if event.key == 'backspace':
                     if self.number != '':
                         self.number = self.number[:-1]

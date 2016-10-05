@@ -406,7 +406,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
     return st
 
 
-def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None):
+def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None, showscale=False):
     """
     Plot record section of data from an obspy stream
     USAGE
@@ -712,7 +712,7 @@ class InteractivePlot:
 
     def __init__(self, st, fig=None, indfirst=0, maxtraces=10, norm=True, xlim=None, ylim=None, scalfact=1.,
                  cosfilt=(0.01, 0.02, 20, 30), water_level=60, output='VEL', textline=['>', '>', '>', '>', '>'],
-                 menu=None, quickdraw=True, processing=None):
+                 menu=None, quickdraw=True, processing=None, showscale=False):
         """
         Initializes the class with starting values
         (st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=True, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None)
@@ -739,6 +739,7 @@ class InteractivePlot:
         self.picknumber = 0
         self.picks = {}
         self.init = 0
+        self.showscale = showscale
         self.st_original = st.copy()
         self.st = st
         self.st_current = st.copy()
@@ -796,7 +797,7 @@ class InteractivePlot:
                               norm=self.normflag, indfirst=self.indfirst,
                               maxtraces=self.maxtraces, textline=self.print1,
                               menu=self.menu_print, processing=self.processing_print,
-                              textbox=True, quickdraw=self.quickdraw)
+                              textbox=True, quickdraw=self.quickdraw, showscale=self.showscale)
         else:
             self.fig = fig
         self.axbox = self.fig.get_axes()[0]
@@ -937,7 +938,12 @@ class InteractivePlot:
         #keep track of numbers that are typed in an print them as they are typed in
         if self.numflag is not None:
             if self.numflag in '!,F,J,P,W,F1' and event.key != 'enter':
-                self.number = self.number + event.key
+                print event.key
+                if event.key == 'backspace':
+                    if self.number != '':
+                        self.number = self.number[:-1]
+                else:
+                    self.number = self.number + event.key
                 event.key = '.'
                 #try:
                 #    int(event.key)

@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sigproc
 from obspy.signal.array_analysis import array_transff_freqslowness, array_transff_wavenumber, array_processing, get_geometry, get_timeshift, get_spoint
-from obspy.signal.util import utlGeoKm, nextpow2
+from obspy.signal.util import utlGeoKm, next_pow_2
 from obspy import UTCDateTime, Stream
 from obspy.signal.headers import clibsignal
 import math
@@ -14,6 +14,7 @@ from matplotlib.colors import Normalize
 import matplotlib.dates as mdates
 import glob
 import os
+from scipy.fftpack import fft, ifft, ifftshift
 
 
 def correlation_analysis(st, flow, fhigh, plotfit=True, plotdots=True):
@@ -436,13 +437,14 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh, win
     return t, rel_power, abs_power, baz, slow
 
 
-def backproject(st, v, tshifts, flow, fhigh, winlen, overlap, gridx, gridy, gridz=None, starttime=None, endtime=None, coords=None, ds=False):
+def backproject(st, v, tshifts, freqmin, freqmax, winlen, overlap, gridx, gridy, gridz=None, starttime=None, endtime=None, relshift=0., coords=None, ds=False):
+    ## COULD EASILY OUTPUT ALL FREQUENCIES, BUT ONLY VALID FOR THE ONE THE TIMESHIFTS OR SPEED ARE FOR
     """
     st should have coordinates embedded, if not, coords need to be supplied in teh form of ?
     v, constant velocity to use to estimate travel times in half space set to None if tshifts are specified
-    tshifts, time shifts, in seconds, from each station to each grid point in format ?, set to None if using constant velocity
-    flow - lowest frequency to consider
-    fhigh - higher frequency to consider
+    tshifts, time shifts, in seconds, from each station to each grid point in same order as traces in st, set to None if using constant velocity
+    freqmin - lowest frequency to consider
+    freqmax - higher frequency to consider
     gridxyz - grid of points to search over for backprojection
     winlen - window length in seconds
     overlap - amount to overlap windows from 0 (no overlap) to 1 (completely overlapped)
@@ -450,6 +452,7 @@ def backproject(st, v, tshifts, flow, fhigh, winlen, overlap, gridx, gridy, grid
     ds - If true, will downsample to 1/(fhigh*2)
     starttime - start time in UTC of analysis, if None, will use start time of st
     endtime - same as above but end time
+    relshift - relative shift to apply to all stations to account for travel time to first station
     """
     # Initial data processing
     samprates = [trace.stats.sampling_rate for trace in st]
@@ -457,16 +460,18 @@ def backproject(st, v, tshifts, flow, fhigh, winlen, overlap, gridx, gridy, grid
         print('sample rates are not all equal, resampling to minimum sample rate')
         st = st.resample(np.min(samprates))
     if ds is True:
-        st = st.resample(1./(fhigh*2.))
+        st = st.resample(1./(freqmax*2.))
     dt = st[0].stats.sampling_rate
     if starttime is None:
         starttime = np.min([trace.stats.starttime for trace in st])
     if endtime is None:
-        endtime = np.max([trace.stats.starttime for trace in st])
+        endtime = np.max([trace.stats.endtime for trace in st])
     st.trim(starttime, endtime, pad=True)  # turns into masked array if needs to pad, might need to check if this breaks things
 
     nsta = len(st)
 
+    if gridz is None:
+        gridz = np.zeros(np.shape(gridx))  # if no elevations provided, assume all at zero elevation
     # Pull out coords for later usage
     sx = []
     sy = []
@@ -488,11 +493,62 @@ def backproject(st, v, tshifts, flow, fhigh, winlen, overlap, gridx, gridy, grid
             names.append(trace.stats.station)
             chan.append(trace.stats.channel)
 
-    nwins = int((endtime-starttime)/(winlen*(1.-overlap))) - 3
+    nwins = int((endtime-starttime)/(winlen*(1.-overlap))) - 3  # look into why 3
     incr = (1.-overlap)*winlen
-    stt = np.arange(0., incr*nwins, incr)
+    sttm = np.arange(0., incr*nwins, incr)
 
+    winlensamp = int(np.round(winlen*dt))
+    nfft = 2*next_pow_2(winlen*dt)
+    freqs = np.fft.fftfreq(nfft, 1/dt)
+    freqsubl = len(freqs[(freqs >= freqmin) & (freqs <= freqmax)])
 
+    power = np.zeros((len(gridx), nwins, freqsubl))
+    powernon = power.copy()
+    meanpow = np.zeros((len(gridx), nwins))
+    # Compute stack power at each hammer location for each point in time (need to figure out how to do ARF for this)
+    for n in np.arange(nwins):
+        reftime = starttime + sttm[n]
+        for i, (gx, gy, gz) in enumerate(zip(gridx, gridy, gridz)):
+            # Figure out what shifts are
+            if v is not None and tshifts is None:
+                shifts = np.sqrt((sx-gx)**2 + (sy-gy)**2 + (selev-gz)**2)/v
+            elif tshifts is not None and v is None:
+                shifts = tshifts + relshift
+            else:
+                print('neither tshifts or v defined properly')
+            # Cut out window at relative start time
+            sttemp = st.copy().trim(starttime=reftime)
+            # Apply shifts, in time domain for grid point i
+            extract = np.zeros((len(sttemp), freqsubl)) + 1j*np.zeros((len(sttemp), freqsubl))
+            extractnon = extract.copy()
+            k = 0
+            for tr, shift in zip(sttemp, shifts):
+                tr.detrend('demean')
+                tr.taper(max_percentage=0.05, type='cosine')
+                x = tr.data[:winlensamp]
+                s = int(np.round(shift * tr.stats.sampling_rate))
+                N = nfft
+                r = np.floor(N/2)+1
+                f = (np.arange(1, N+1)-r)/(N/2)
+                p = np.exp(-1j*s*np.pi*f)  # seems like it needs negative sign to shift in the right direction...
+                y = fft(x, nfft)*ifftshift(p)
+                ynon = fft(x, nfft)
+                # whitening?
+                #y = y/np.abs(y)
+                #indx = np.where((freqs >= freqmin) & (freqs <= freqmax))
+                extract[k, :] = y[(freqs >= freqmin) & (freqs <= freqmax)]
+                extractnon[k, :] = ynon[(freqs >= freqmin) & (freqs <= freqmax)]
+                #import pdb;pdb.set_trace()
+                k += 1
+                # extract mean beam power over this frequency range and add to cumulative total for this point
+            power[i, n, :] = ((1./nsta) * np.abs(np.sum(extract, 0)))**2
+            powernon[i, n, :] = ((1./nsta) * np.abs(np.sum(extractnon, 0)))**2
+            meanpow[i, n] = np.mean(power[i, n, :])/np.mean(powernon[i, n, :])
+        print('%i of %i' % (n, nwins))
+
+    fvec = freqs[(freqs >= freqmin) & (freqs <= freqmax)]
+    tvec = sttm + incr/2.
+    return power, meanpow, tvec, fvec
 
 
 def beamform_spherical(st, slim, sstep, freqlow, freqhigh, win_len, minbeampow, percdiv, stepdiv, Dmin, Dmax, Dstep, stime=None, etime=None, win_frac=0.05, outfolder=None, coordsys='xy', verbose=False):

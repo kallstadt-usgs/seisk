@@ -13,6 +13,7 @@ from obspy.core import AttribDict
 import os
 from textwrap import wrap
 import urllib2
+from scipy.stats import mode
 
 """
 Functions for downloading and interacting with seismic data. Based on obspy.
@@ -73,7 +74,7 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
             st = client.get_waveforms(network, station, location, channel,
                                       t1, t2, attach_response=True)
             try:
-                st.merge(fill_value='interpolate')
+                st.merge(fill_value=0.)
             except:
                 print 'bulk merge failed, trying station by station'
                 st_new = Stream()
@@ -81,11 +82,17 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
                 for sta in stationlist:
                     temp = st.select(station=sta)
                     try:
-                        temp.merge(fill_value='interpolate')
+                        temp.merge(fill_value=0.)
                         st_new += temp
-                    except Exception as e:
-                        print e
-                        print('%s would not merge - deleting it') % (sta,)
+                    except:
+                        # Try resampling
+                        sr = [tr.stats.sampling_rate for tr in temp]
+                        news = mode(sr)[0][0]
+                        temp.resample(news)
+                        temp.merge(fill_value=0.)
+                        st_new += temp
+                    #finally:
+                    #    print('%s would not merge - deleting it') % (sta,)
                 st = st_new
             st.detrend('linear')
             #find min start time
@@ -406,7 +413,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
     return st
 
 
-def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None):
+def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None, figsize=None):
     """
     Plot record section of data from an obspy stream
     USAGE
@@ -426,6 +433,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     menu = Text of help menu to print, None for no help menu
     quickdraw = Uses obsPy's minmax plot method to make plotting much faster if there are more than 30 samples per pixel on the plot
     processing = True to show processing history, otherwise None
+    figsize = tuple of figure size in inches e.g., (10, 10) is 10x10inches, (width, height)
 
     OUTPUTS
     fig = handle of figure
@@ -441,7 +449,10 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     rep = rep[0:len(st)]
 
     if update is False:
-        fig = plt.figure(figsize=(12, min(10, 3*len(st))))
+        if figsize is None:
+            fig = plt.figure(figsize=(12, min(10, 3*len(st))))
+        else:
+            fig = plt.figure(figsize=figsize)
         if textbox is True:
             axbox = fig.add_axes([0.2, 0.05, 0.75, 0.1])
             ax = fig.add_axes([0.2, 0.2, 0.75, 0.75])  # left bottom width height
@@ -787,7 +798,9 @@ class InteractivePlot:
         + - page down
         - - page up
         @ - toggle quickdraw (default on, may be slow if you turn it off)
-        ! - save figure (without textbox)
+        ! - save figure (without textbox) using same dimensions of current figure
+        $ - make spectra
+        # - show or hide scale bars
         """
         if fig is None:
             self.fig = recsec(self.st_current, xlim=xlim,
@@ -921,13 +934,17 @@ class InteractivePlot:
                 redraw = True
             elif self.numflag == '!':
                 print('creating figure')
+                figsize = self.fig.get_size_inches()
+                textpos = self.axbox.get_position()
+                figsize = tuple([figsize[0], figsize[1] - textpos.height*figsize[1]])
                 figprint = recsec(self.st_current, xlim=np.sort(self.xlims[-2:]),
                                   ylim=ylims, scalfact=self.scalfact,
                                   update=False, fighandle=[],
                                   norm=self.normflag, indfirst=self.indfirst,
                                   maxtraces=self.maxtraces,
                                   menu=None, processing=None,
-                                  quickdraw=False, textbox=False)
+                                  quickdraw=False, textbox=False,
+                                  figsize=figsize)
                 figprint.savefig(self.number+'.png', format='png')
                 plt.close(figprint)
                 print('figure %s saved' % self.number)
@@ -937,7 +954,11 @@ class InteractivePlot:
         #keep track of numbers that are typed in an print them as they are typed in
         if self.numflag is not None:
             if self.numflag in '!,F,J,P,W,F1' and event.key != 'enter':
-                self.number = self.number + event.key
+                if event.key == 'backspace':
+                    if self.number != '':
+                        self.number = self.number[:-1]
+                else:
+                    self.number = self.number + event.key
                 event.key = '.'
                 #try:
                 #    int(event.key)
@@ -1518,15 +1539,20 @@ def pyproj_distaz(lat1, lon1, lat2, lon2, ellps='WGS84'):
     return az12, az21, dist
 
 
-def get_stations_iris(event_lat, event_lon, event_time, minradiuskm=0., maxradiuskm=25, chan=('BH?,EH?,HH?,BDF')):
+def get_stations_iris(event_lat, event_lon, event_time, startbefore=None, minradiuskm=0., maxradiuskm=25, chan=('BH?,EH?,HH?,BDF')):
     """
     Get station info from IRIS webservices station tool for stations within specified radius
     http://service.iris.edu/fdsnws/station/1/
     Can use ? wildcards in the channel designators, write whole channel list as one string
+    startbefore = optional start time in case you want to use a different startbefore time than the event_time
     """
+    if startbefore is None:
+        sttime = event_time.strftime('%Y-%m-%dT%H:%M:%S')
+    else:
+        sttime = startbefore.strftime('%Y-%m-%dT%H:%M:%S')
     # build the url use to get station info from IRIS webservices
     url = ('http://service.iris.edu/fdsnws/station/1/query?latitude=%f&longitude=%f&minradius=%f&maxradius=%f&cha=%s&startbefore=%s&endafter=%s&level=channel&format=text&nodata=404'
-           % (event_lat, event_lon, minradiuskm/111.32, maxradiuskm/111.32, chan, event_time.strftime('%Y-%m-%dT%H:%M:%S'), event_time.strftime('%Y-%m-%dT%H:%M:%S')))
+           % (event_lat, event_lon, minradiuskm/111.32, maxradiuskm/111.32, chan, sttime, event_time.strftime('%Y-%m-%dT%H:%M:%S')))
     temp = urllib2.urlopen(url)
     file1 = temp.read()
     lines = [line.split('|') for line in file1.split('\n')[1:]]

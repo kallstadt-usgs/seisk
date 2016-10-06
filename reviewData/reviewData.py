@@ -13,6 +13,7 @@ from obspy.core import AttribDict
 import os
 from textwrap import wrap
 import urllib2
+from scipy.stats import mode
 
 """
 Functions for downloading and interacting with seismic data. Based on obspy.
@@ -73,7 +74,7 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
             st = client.get_waveforms(network, station, location, channel,
                                       t1, t2, attach_response=True)
             try:
-                st.merge(fill_value='interpolate')
+                st.merge(fill_value=0.)
             except:
                 print 'bulk merge failed, trying station by station'
                 st_new = Stream()
@@ -81,11 +82,17 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
                 for sta in stationlist:
                     temp = st.select(station=sta)
                     try:
-                        temp.merge(fill_value='interpolate')
+                        temp.merge(fill_value=0.)
                         st_new += temp
-                    except Exception as e:
-                        print e
-                        print('%s would not merge - deleting it') % (sta,)
+                    except:
+                        # Try resampling
+                        sr = [tr.stats.sampling_rate for tr in temp]
+                        news = mode(sr)[0][0]
+                        temp.resample(news)
+                        temp.merge(fill_value=0.)
+                        st_new += temp
+                    #finally:
+                    #    print('%s would not merge - deleting it') % (sta,)
                 st = st_new
             st.detrend('linear')
             #find min start time
@@ -406,7 +413,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
     return st
 
 
-def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None, showscale=False, figsize=None):
+def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None, figsize=None):
     """
     Plot record section of data from an obspy stream
     USAGE
@@ -716,7 +723,7 @@ class InteractivePlot:
 
     def __init__(self, st, fig=None, indfirst=0, maxtraces=10, norm=True, xlim=None, ylim=None, scalfact=1.,
                  cosfilt=(0.01, 0.02, 20, 30), water_level=60, output='VEL', textline=['>', '>', '>', '>', '>'],
-                 menu=None, quickdraw=True, processing=None, showscale=False):
+                 menu=None, quickdraw=True, processing=None):
         """
         Initializes the class with starting values
         (st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=True, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None)
@@ -743,7 +750,6 @@ class InteractivePlot:
         self.picknumber = 0
         self.picks = {}
         self.init = 0
-        self.showscale = showscale
         self.st_original = st.copy()
         self.st = st
         self.st_current = st.copy()
@@ -803,7 +809,7 @@ class InteractivePlot:
                               norm=self.normflag, indfirst=self.indfirst,
                               maxtraces=self.maxtraces, textline=self.print1,
                               menu=self.menu_print, processing=self.processing_print,
-                              textbox=True, quickdraw=self.quickdraw, showscale=self.showscale)
+                              textbox=True, quickdraw=self.quickdraw)
         else:
             self.fig = fig
         self.axbox = self.fig.get_axes()[0]
@@ -1533,15 +1539,20 @@ def pyproj_distaz(lat1, lon1, lat2, lon2, ellps='WGS84'):
     return az12, az21, dist
 
 
-def get_stations_iris(event_lat, event_lon, event_time, minradiuskm=0., maxradiuskm=25, chan=('BH?,EH?,HH?,BDF')):
+def get_stations_iris(event_lat, event_lon, event_time, startbefore=None, minradiuskm=0., maxradiuskm=25, chan=('BH?,EH?,HH?,BDF')):
     """
     Get station info from IRIS webservices station tool for stations within specified radius
     http://service.iris.edu/fdsnws/station/1/
     Can use ? wildcards in the channel designators, write whole channel list as one string
+    startbefore = optional start time in case you want to use a different startbefore time than the event_time
     """
+    if startbefore is None:
+        sttime = event_time.strftime('%Y-%m-%dT%H:%M:%S')
+    else:
+        sttime = startbefore.strftime('%Y-%m-%dT%H:%M:%S')
     # build the url use to get station info from IRIS webservices
     url = ('http://service.iris.edu/fdsnws/station/1/query?latitude=%f&longitude=%f&minradius=%f&maxradius=%f&cha=%s&startbefore=%s&endafter=%s&level=channel&format=text&nodata=404'
-           % (event_lat, event_lon, minradiuskm/111.32, maxradiuskm/111.32, chan, event_time.strftime('%Y-%m-%dT%H:%M:%S'), event_time.strftime('%Y-%m-%dT%H:%M:%S')))
+           % (event_lat, event_lon, minradiuskm/111.32, maxradiuskm/111.32, chan, sttime, event_time.strftime('%Y-%m-%dT%H:%M:%S')))
     temp = urllib2.urlopen(url)
     file1 = temp.read()
     lines = [line.split('|') for line in file1.split('\n')[1:]]

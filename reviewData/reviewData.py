@@ -181,8 +181,8 @@ def getdata_exact(stations, t1, t2, attach_response=True,
                     sttemp.merge(fill_value=0.)
                     st += sttemp.copy()
                 except Exception as e:
-                        print e
-                        print('failed to grab data from %s, moving on') % (statup,)
+                    print e
+                    print('failed to grab data from %s, moving on') % (statup,)
             st.detrend('linear')
             #find min start time
             mint = min([trace.stats.starttime for trace in st])

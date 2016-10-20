@@ -73,6 +73,9 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
             client = FDSN_Client(clientname)
             st = client.get_waveforms(network, station, location, channel,
                                       t1, t2, attach_response=True)
+            # if any have integer data, turn into float
+            for tr in st:
+                tr.data = tr.data.astype(float)
             try:
                 st.merge(fill_value=0.)
             except:
@@ -172,7 +175,10 @@ def getdata_exact(stations, t1, t2, attach_response=True,
                 try:
                     sttemp = client.get_waveforms(statup[2], statup[0], statup[3], statup[1],
                                                   t1, t2, attach_response=True)
-                    sttemp.merge(fill_value='interpolate')
+                                # if any have integer data, turn into float
+                    for tr in sttemp:
+                        tr.data = tr.data.astype(float)
+                    sttemp.merge(fill_value=0.)
                     st += sttemp.copy()
                 except Exception as e:
                         print e
@@ -246,7 +252,9 @@ def getdata_winston(stations, okchannels, t1, t2, attach_response=True,
                 try:
                     client = ew_client(clientname, port)
                     temp = client.getWaveform(sta[2], sta[0], '', sta[1], t1, t2)
-                    temp.merge(fill_value='interpolate')
+                    for tr in temp:
+                        tr.data = tr.data.astype(float)
+                    temp.merge(fill_value=0.)
                     temp.detrend('linear')
                     if flag == 0:
                         st = temp
@@ -331,19 +339,29 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
             except Exception as e:
                 print e
                 print 'could not read %s, skipping to next file name' % file1
+        for tr in st:
+            tr.data = tr.data.astype(float)
         try:
-            st.merge(fill_value='interpolate')
+            st.merge(fill_value=0.)
         except:
             print 'bulk merge failed, trying station by station'
             st_new = Stream()
             stationlist = unique_list([trace.stats.station for trace in st])
             for sta in stationlist:
                 temp = st.select(station=sta)
+                for tr in temp:
+                    tr.data = tr.data.astype(float)
                 try:
-                    temp.merge(fill_value='interpolate')
+                    temp.merge(fill_value=0.)
                     st_new += temp
-                except Exception as e:
-                    print e
+                except:
+                    # Try resampling
+                    sr = [tr.stats.sampling_rate for tr in temp]
+                    news = mode(sr)[0][0]
+                    temp.resample(news)
+                    temp.merge(fill_value=0.)
+                    st_new += temp
+                finally:
                     print('%s would not merge - deleting it') % (sta,)
             st = st_new
         if starttime or endtime:

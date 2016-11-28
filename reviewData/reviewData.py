@@ -181,8 +181,8 @@ def getdata_exact(stations, t1, t2, attach_response=True,
                     sttemp.merge(fill_value=0.)
                     st += sttemp.copy()
                 except Exception as e:
-                        print e
-                        print('failed to grab data from %s, moving on') % (statup,)
+                    print e
+                    print('failed to grab data from %s, moving on') % (statup,)
             st.detrend('linear')
             #find min start time
             mint = min([trace.stats.starttime for trace in st])
@@ -621,6 +621,78 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
         if textbox is True:
             axbox.figure.canvas.draw()
     return fig
+
+
+def make_multitaper(st, number_of_tapers=None, time_bandwidth=2., sine=False, recsec=False,
+                    logx=False, logy=False, xunits='Hz', xlim=None, yunits=None):
+    """
+    Plot multitaper spectra of signals in st
+
+    # TO DO add statistics and optional_output options
+
+    :param st: obspy stream or trace containing data to plot
+    :param number_of_tapers: Number of tapers to use, Defaults to int(2*time_bandwidth) - 1.
+     This is maximum senseful amount. More tapers will have no great influence on the final spectrum but increase the
+     calculation time. Use fewer tapers for a faster calculation.
+    :param time_bandwidth: Time-bandwidth product. Common values are 2, 3, 4 and numbers in between.
+    :param sine: if True, will use sine_psd instead of multitaper, sine method should be used for sharp cutoffs or
+     deep valleys, or small sample sizes
+    :param recsec: if True, will plot spectra each in their own plot, otherwise all spectra will be in the same plot
+    :param logx: if True, will use log scale for x axis
+    :param logy: if True, will use log scale for y axis
+    :param xunits: if 'Hz' x axis will be frequency, if 'sec' x axis will be period
+    :param xlim: tuple of xlims like (0., 100.)
+    :param yunits: string defining y units
+    """
+    from mtspec import mtspec, sine_psd
+
+    st = Stream(st)  # in case it's a trace
+    st.detrend('demean')
+
+    if recsec:
+        fig, axes = plt.subplots(len(st), sharex=True, sharey=True, figsize=(10, min(10, 2*len(st))))
+    else:
+        fig, ax = plt.subplots(1, figsize=(8, 5))
+    plt.suptitle('Time period: %s to %s' % (str(st[0].stats.starttime), str(st[0].stats.endtime)))
+
+    if logx:
+        logx = 'log'
+    else:
+        logx = 'linear'
+    if logy:
+        logy = 'log'
+    else:
+        logy = 'linear'
+
+    for i, st1 in enumerate(st):
+        if sine is False:
+            nfft = int(nextpow2((st1.stats.endtime - st1.stats.starttime) * st1.stats.sampling_rate))
+            spec, freq = mtspec(st1.data, 1./st1.stats.sampling_rate, time_bandwidth=time_bandwidth,
+                                number_of_tapers=number_of_tapers, nfft=nfft)
+        else:
+            st1.taper(max_percentage=0.05, type='cosine')
+            spec, freq = sine_psd(st1.data, 1./st1.stats.sampling_rate)
+        if recsec:
+            ax = axes[i]
+        if xunits == 'Hz':
+            ax.plot(freq, spec, label=st1.id)
+            xun = 'Frequency (Hz)'
+        elif xunits == 'sec':
+            ax.plot(1./freq, spec, label=st1.id)
+            xun = 'Period (sec)'
+        if i == len(st)-1 and recsec is False:
+            plt.legend()
+        elif recsec:
+            plt.legend()
+        if yunits is not None:
+            ax.set_ylabel('Power spectral density (%s)' % yunits)
+        else:
+            ax.set_ylabel('Power spectral density')
+        ax.set_yscale(logy)
+        ax.set_xscale(logx)
+        ax.set_xlim(xlim)
+    ax.set_xlabel(xun)
+    plt.show()
 
 
 def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, wlen=None,

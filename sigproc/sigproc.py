@@ -674,3 +674,53 @@ def peakdet(v, delta, x=None):
                 lookformax = True
 
     return array(maxtab), array(mintab)
+
+
+def multitaper_fourier_spectra(st, win=None, nfft=None, plot=False, powerspec=False):
+"""
+    Plot multitaper fourier amplitude spectra of signals in st
+    :param st: obspy stream or trace containing data to plot
+    :param win: tuple of time window in seconds (e.g. win=(3., 20.)) over which to compute amplitude spectrum
+    :param nfft: number of points to use in nfft, default None uses the next power of 2 of length of dat
+    :param plot: True, plot spectrum, False, don't
+    :param powerspec: = False for fourier amplitude spectrum, True for power spectrum
+    """
+from mtspec import mtspec, sine_psd
+    st = Stream(st)  # in case it's a trace
+    st.detrend('demean')
+    st.taper(max_percentage=0.05, type='cosine')
+
+tvec = maketvec(st)  # Time vector
+dat = st.data
+
+if win is not None:
+        if win[1] > tvec.max() or win[0] < tvec.min():
+            print 'Time window specified not compatible with length of time series'
+            return
+        dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
+        tvec = tvec[(tvec >= win[0]) & (tvec <= win[1])]
+
+for i, st1 in enumerate(st):
+    nfft = int(nextpow2((st1.stats.endtime - st1.stats.starttime) * st1.stats sampling_rate))
+    if powerspec is False:
+        amps = np.abs(np.fft.rfft(dat, n=nfft))
+        freqs = np.fft.rfftfreq(nfft, 1/trace.stats.sampling_rate)
+    else:
+        amps = np.abs(np.fft.fft(dat, n=nfft))**2
+        freqs = np.fft.fftfreq(nfft, 1/trace.stats.sampling_rate)
+
+    if plot is True:
+        fig = plt.figure(figsize=(6, 6))
+        ax = fig.gca()
+        ax.plot(freqs, amps)
+        ax.set_xlabel('Frequency (Hz)')
+        if powerspec is False:
+            plt.title('Amplitude Spectrum')
+        else:
+            plt.title('Power Spectrum')
+        plt.show()
+    return freqs, amps
+
+
+
+    

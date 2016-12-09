@@ -1818,6 +1818,10 @@ def multitaper_fourier_spectra(st, win=None, nfft=None, powerspec=False, recsec=
     :param recsec: if True, will plot spectra each in their own plot, otherwise all spectra will be in the same plot
     :param xlim: tuple of xlims like (0., 100.)
     """
+
+    ###Should I have logx, logy as parameters? 
+    ###What about xunits? Won't it always be Freq? yunits?
+
 from mtspec import mtspec, sine_psd
 
 st = Stream(st)  # in case it's a trace
@@ -1841,7 +1845,8 @@ if win is not None:
 
 for i, st1 in enumerate(st):
     nfft = int(nextpow2((st1.stats.endtime - st1.stats.starttime) * st1.stats sampling_rate))
-    st1.taper(max_percentage=0.05, type='cosine') # SHOULD I BE USING mtspec instead? And produce spec, freq like in make_multitaper????????????
+    st1.taper(max_percentage=0.05, type='cosine') 
+    # SHOULD I BE USING mtspec instead? And produce spec, freq like in make_multitaper??????
     if powerspec is False:
         amps = np.abs(np.fft.rfft(dat, n=nfft))
         freqs = np.fft.rfftfreq(nfft, 1/trace.stats.sampling_rate)

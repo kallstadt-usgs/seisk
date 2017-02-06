@@ -1667,9 +1667,11 @@ def get_stations_ncedc(event_lat, event_lon, event_time, minradiuskm=0., maxradi
     return lines, source
 
 
-def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=0.05, cosfilt=None, water_level=60., csvfile=None, verbal=False):
+def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=0.05, cosfilt=None, water_level=60.,
+             csvfile=None, verbal=False, alreadycoor=False, corrto='acc', scale=1.):
     """
-    Performs station correction (st must have response info attached to it) - removes trends and tapers with 5 percent cosine taper before doing station correction, adds as field in st and prints out results, option to save csv file
+    Performs station correction (st must have response info attached to it or already be corrected) - removes trends and
+    tapers with 5 percent cosine taper before doing station correction, adds as field in st and prints out results, option to save csv file
     All values in m/s and/or m/s**2
     USAGE
 
@@ -1684,6 +1686,10 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
     water_level - water level to use in station correction
     csvfile - full file path of csvfile to output with results, None if don't want to output csvfile
     verbal - if True, will print out all results to screen
+    alreadycorr - if False, needs to be corrected for station response still and response info needs to be attached,
+                    if True, need to set coorto to 'vel' or 'acc' and set scale to multiply units to get in terms of meters
+    corrto - see alreadycoor
+    scale - see alreadycoor
 
     OUTPUTS
     stacc - stream of data corrected to acceleration with pga's, pgv's and psa's attached, stored as AttribDict in in tr.stats.gmparam
@@ -1703,46 +1709,60 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
         except:
             print('Could not attach lats and lons, continuing')
 
-    stacc = st.copy()
-    # Build place to store gm parameters
-    for trace in stacc:
-        trace.stats.gmparam = AttribDict()
-
-    try:
-        stacc.remove_response(output='ACC', pre_filt=cosfilt, water_level=water_level)
-    except:
-        print('Failed to do bulk station correction, trying one at a time')
-        stacc = st.copy()  # Start with fresh data
-        removeid = []
+    if alreadycoor:
+        if corrto == 'acc':
+            stacc = st.copy()
+            stvel = st.copy().integrate()
+        elif corrto == 'vel':
+            stvel = st.copy()
+            stacc = st.copy().differentiate()
+        # Build place to store gm parameters
         for trace in stacc:
-            try:
-                trace.remove_response(output='ACC', pre_filt=cosfilt, water_level=water_level)
-            except:
-                print 'Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)
-                removeid.append(trace.id)
-        for rmid in removeid:  # Delete uncorrected ones
-            for tr in stacc.select(id=rmid):
-                stacc.remove(tr)
-
-    stvel = st.copy()
-    # Build place to store gm parameters
-    for trace in stvel:
-        trace.stats.gmparam = AttribDict()
-    try:
-        stvel.remove_response(output='VEL', pre_filt=cosfilt, water_level=water_level)
-    except:
-        print('Failed to do bulk station correction, trying one at a time')
-        stvel = st.copy()  # Start with fresh data
-        removeid = []
+            trace.stats.gmparam = AttribDict()
         for trace in stvel:
-            try:
-                trace.remove_response(output='VEL', pre_filt=cosfilt, water_level=water_level)
-            except:
-                print 'Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)
-                removeid.append(trace.id)
-        for rmid in removeid:  # Delete uncorrected ones
-            for tr in stvel.select(id=rmid):
-                stvel.remove(tr)
+            trace.stats.gmparam = AttribDict()
+
+    else:
+        stacc = st.copy()
+        # Build place to store gm parameters
+        for trace in stacc:
+            trace.stats.gmparam = AttribDict()
+
+        try:
+            stacc.remove_response(output='ACC', pre_filt=cosfilt, water_level=water_level)
+        except:
+            print('Failed to do bulk station correction, trying one at a time')
+            stacc = st.copy()  # Start with fresh data
+            removeid = []
+            for trace in stacc:
+                try:
+                    trace.remove_response(output='ACC', pre_filt=cosfilt, water_level=water_level)
+                except:
+                    print 'Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)
+                    removeid.append(trace.id)
+            for rmid in removeid:  # Delete uncorrected ones
+                for tr in stacc.select(id=rmid):
+                    stacc.remove(tr)
+
+        stvel = st.copy()
+        # Build place to store gm parameters
+        for trace in stvel:
+            trace.stats.gmparam = AttribDict()
+        try:
+            stvel.remove_response(output='VEL', pre_filt=cosfilt, water_level=water_level)
+        except:
+            print('Failed to do bulk station correction, trying one at a time')
+            stvel = st.copy()  # Start with fresh data
+            removeid = []
+            for trace in stvel:
+                try:
+                    trace.remove_response(output='VEL', pre_filt=cosfilt, water_level=water_level)
+                except:
+                    print 'Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)
+                    removeid.append(trace.id)
+            for rmid in removeid:  # Delete uncorrected ones
+                for tr in stvel.select(id=rmid):
+                    stvel.remove(tr)
 
     if pga is True:
         for j, trace in enumerate(stacc):
@@ -1787,7 +1807,7 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
             writer = csv.writer(csvfile1)
             writer.writerow(['Id']+[tr.id for tr in st])
             try:
-                test = [tr.stats.coordinates['latitude'] for tr in st]
+                #test = [tr.stats.coordinates['latitude'] for tr in st]
                 writer.writerow(['Lat']+[tr.stats.coordinates['latitude'] for tr in st])
                 writer.writerow(['Lon']+[tr.stats.coordinates['longitude'] for tr in st])
             except:

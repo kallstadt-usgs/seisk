@@ -197,10 +197,8 @@ def getdata_exact(stations, t1, t2, attach_response=True,
     return st
 
 
-def getdata_winston(stations, okchannels, t1, t2, attach_response=True,
-                    savedat=False, folderdat='data', filenamepref='Data_',
-                    clientname='products01.ess.washington.edu', port=16017,
-                    loadfromfile=False, reloadfile=False):
+def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_response=True,
+                    savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False):
     """
     Get data from winston waveserver
     USAGE

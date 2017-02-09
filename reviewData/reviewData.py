@@ -791,7 +791,9 @@ class InteractivePlot:
     """
     Class for interactive plotting using recsec
     USAGE:
-    zp = reviewData.InteractivePlot(st, fig=None, indfirst=0, maxtraces=10, cosfilt=(0.01, 0.02, 20., 30.), water_level=60, output='VEL')
+    zp = reviewData.InteractivePlot(st, fig=None, indfirst=0, maxtraces=10, norm=True, xlim=None, ylim=None, scalfact=1.,
+                 cosfilt=(0.01, 0.02, 20, 30), water_level=60, output='VEL', textline=['>', '>', '>', '>', '>'],
+                 menu=None, quickdraw=True, processing=None):
 
     INPUTS
     see recsec for recsec inputs
@@ -1564,9 +1566,9 @@ def attach_distaz_IRIS(st, event_lat, event_lon):
     """
     attach a string of the distance,az,baz to st, uses IRIS webservices station tool
     """
-    from obspy.iris import Client
+    #from obspy.iris import Client
     #get station lat lon from database
-    client = Client()
+    #client = Client()
     for i, trace in enumerate(st):
         if trace.stats.location == '':
             loc = '--'
@@ -1579,10 +1581,11 @@ def attach_distaz_IRIS(st, event_lat, event_lon):
         lines = [line.split('|') for line in file1.split('\n')[1:]]
         sta_lat = float(lines[0][2])
         sta_lon = float(lines[0][3])
-        result = client.distaz(sta_lat, sta_lon, event_lat, event_lon)
-        trace.stats.rdist = result['distance']*111.32
-        trace.stats.azimuth = result['azimuth']
-        trace.stats.back_azimuth = result['backazimuth']
+        baz, az, dist = pyproj_distaz(sta_lat, sta_lon, event_lat, event_lon, ellps='WGS84')
+        #result = client.distaz(sta_lat, sta_lon, event_lat, event_lon)
+        trace.stats.rdist = dist  # result['distance']*111.32
+        trace.stats.azimuth = az  # result['azimuth']
+        trace.stats.back_azimuth = baz  # result['backazimuth']
         st[i] = trace
     return st
 

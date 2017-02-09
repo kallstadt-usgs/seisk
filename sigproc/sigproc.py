@@ -307,7 +307,7 @@ def spectrum(trace, win=None, nfft=None, plot=False, powerspec=False):
     INPUTS
     trace = obspy trace object
     win = tuple of time window in seconds (e.g. win=(3., 20.)) over which to compute amplitude spectrum
-    nfft = number of points to use in nfft, default None uses the next power of 2 of length of dat
+    nfft = number of points to use in nfft, default None uses the next power of 2 of length of trace
     plot = True, plot spectrum, False, don't
     powerspec = False for fourier amplitude spectrum, True for power spectrum
     OUTPUTS

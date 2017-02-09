@@ -202,10 +202,8 @@ def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_respo
     """
     Get data from winston waveserver
     USAGE
-    st = getdata_winston(stations, okchannels, t1, t2, attach_response=True,
-                    savedat=False, folderdat='data', filenamepref='Data_',
-                    clientname='products01.ess.washington.edu', port=16017,
-                    loadfromfile=False)
+    st = getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_response=True,
+                    savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False)
     INPUTS
     stations = list of tuples in form '[(station,channel,network),]', network and channel can be *
     okchannels = string listing which channels are ok, e.g. 'EHZ,BHZ', if all are ok, insert * (default)
@@ -621,8 +619,8 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     return fig
 
 
-def make_multitaper(st, number_of_tapers=None, time_bandwidth=2., sine=False, recsec=False,
-                    logx=False, logy=False, xunits='Hz', xlim=None, yunits=None):
+def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, recsec=False,
+                    logx=False, logy=False, xunits='Hz', xlim=None, yunits=None, plot=True):
     """
     Plot multitaper spectra of signals in st
 
@@ -632,7 +630,7 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=2., sine=False, re
     :param number_of_tapers: Number of tapers to use, Defaults to int(2*time_bandwidth) - 1.
      This is maximum senseful amount. More tapers will have no great influence on the final spectrum but increase the
      calculation time. Use fewer tapers for a faster calculation.
-    :param time_bandwidth: Time-bandwidth product. Common values are 2, 3, 4 and numbers in between.
+    :param time_bandwidth_div: Smoothing amount, should be between 1 and Nsamps/2.
     :param sine: if True, will use sine_psd instead of multitaper, sine method should be used for sharp cutoffs or
      deep valleys, or small sample sizes
     :param recsec: if True, will plot spectra each in their own plot, otherwise all spectra will be in the same plot
@@ -641,27 +639,32 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=2., sine=False, re
     :param xunits: if 'Hz' x axis will be frequency, if 'sec' x axis will be period
     :param xlim: tuple of xlims like (0., 100.)
     :param yunits: string defining y units
+    :param plot: if True, will show figure, if False, will just output multitaper results
     """
     from mtspec import mtspec, sine_psd
 
     st = Stream(st)  # in case it's a trace
     st.detrend('demean')
 
-    if recsec:
-        fig, axes = plt.subplots(len(st), sharex=True, sharey=True, figsize=(10, min(10, 2*len(st))))
-    else:
-        fig, ax = plt.subplots(1, figsize=(8, 5))
-    plt.suptitle('Time period: %s to %s' % (str(st[0].stats.starttime), str(st[0].stats.endtime)))
+    if plot:
+        if recsec:
+            fig, axes = plt.subplots(len(st), sharex=True, sharey=True, figsize=(10, min(10, 2*len(st))))
+        else:
+            fig, ax = plt.subplots(1, figsize=(8, 5))
 
-    if logx:
-        logx = 'log'
-    else:
-        logx = 'linear'
-    if logy:
-        logy = 'log'
-    else:
-        logy = 'linear'
+        plt.suptitle('Time period: %s to %s' % (str(st[0].stats.starttime), str(st[0].stats.endtime)))
 
+        if logx:
+            logx = 'log'
+        else:
+            logx = 'linear'
+        if logy:
+            logy = 'log'
+        else:
+            logy = 'linear'
+
+    specs = []
+    freqs = []
     for i, st1 in enumerate(st):
         if sine is False:
             nfft = int(nextpow2((st1.stats.endtime - st1.stats.starttime) * st1.stats.sampling_rate))
@@ -670,27 +673,33 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=2., sine=False, re
         else:
             st1.taper(max_percentage=0.05, type='cosine')
             spec, freq = sine_psd(st1.data, 1./st1.stats.sampling_rate)
-        if recsec:
-            ax = axes[i]
-        if xunits == 'Hz':
-            ax.plot(freq, spec, label=st1.id)
-            xun = 'Frequency (Hz)'
-        elif xunits == 'sec':
-            ax.plot(1./freq, spec, label=st1.id)
-            xun = 'Period (sec)'
-        if i == len(st)-1 and recsec is False:
-            plt.legend()
-        elif recsec:
-            plt.legend()
-        if yunits is not None:
-            ax.set_ylabel('Power spectral density (%s)' % yunits)
-        else:
-            ax.set_ylabel('Power spectral density')
-        ax.set_yscale(logy)
-        ax.set_xscale(logx)
-        ax.set_xlim(xlim)
-    ax.set_xlabel(xun)
-    plt.show()
+        specs.append(spec)
+        freqs.append(freq)
+        if plot:
+            if recsec:
+                ax = axes[i]
+            if xunits == 'Hz':
+                ax.plot(freq, spec, label=st1.id)
+                xun = 'Frequency (Hz)'
+            elif xunits == 'sec':
+                ax.plot(1./freq, spec, label=st1.id)
+                xun = 'Period (sec)'
+            if i == len(st)-1 and recsec is False:
+                plt.legend()
+            elif recsec:
+                plt.legend()
+            if yunits is not None:
+                ax.set_ylabel('Power spectral density (%s)' % yunits)
+            else:
+                ax.set_ylabel('Power spectral density')
+            ax.set_yscale(logy)
+            ax.set_xscale(logx)
+            ax.set_xlim(xlim)
+    if plot:
+        ax.set_xlabel(xun)
+        plt.show()
+
+    return specs, freqs
 
 
 def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, wlen=None,

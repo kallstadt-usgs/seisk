@@ -14,6 +14,7 @@ import os
 from textwrap import wrap
 import urllib2
 from scipy.stats import mode
+from sigproc import sigproc
 
 """
 Functions for downloading and interacting with seismic data. Based on obspy.
@@ -620,7 +621,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
 
 
 def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, recsec=False,
-                    logx=False, logy=False, xunits='Hz', xlim=None, yunits=None, plot=True):
+                    logx=False, logy=False, xunits='Hz', xlim=None, yunits=None):
     """
     Plot multitaper spectra of signals in st
 
@@ -641,65 +642,53 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
     :param yunits: string defining y units
     :param plot: if True, will show figure, if False, will just output multitaper results
     """
-    from mtspec import mtspec, sine_psd
 
     st = Stream(st)  # in case it's a trace
     st.detrend('demean')
 
-    if plot:
+    if recsec:
+        fig, axes = plt.subplots(len(st), sharex=True, sharey=True, figsize=(10, min(10, 2*len(st))))
+    else:
+        fig, ax = plt.subplots(1, figsize=(8, 5))
+
+    plt.suptitle('Time period: %s to %s' % (str(st[0].stats.starttime), str(st[0].stats.endtime)))
+
+    if logx:
+        logx = 'log'
+    else:
+        logx = 'linear'
+    if logy:
+        logy = 'log'
+    else:
+        logy = 'linear'
+
+    freqs, amps = sigproc.multitaper(st, number_of_tapers=number_of_tapers, time_bandwidth=time_bandwidth, sine=sine)
+    i = 0
+    for amp, freq in zip(amps, freqs):
         if recsec:
-            fig, axes = plt.subplots(len(st), sharex=True, sharey=True, figsize=(10, min(10, 2*len(st))))
+            ax = axes[i]
+        if xunits == 'Hz':
+            ax.plot(freq, amp, label=st[i].id)
+            xun = 'Frequency (Hz)'
+        elif xunits == 'sec':
+            ax.plot(1./freq, amp, label=st[i].id)
+            xun = 'Period (sec)'
+        if i == len(st)-1 and recsec is False:
+            plt.legend()
+        elif recsec:
+            plt.legend()
+        if yunits is not None:
+            ax.set_ylabel('Power spectral density (%s)' % yunits)
         else:
-            fig, ax = plt.subplots(1, figsize=(8, 5))
+            ax.set_ylabel('Power spectral density')
+        i += 1
+    ax.set_yscale(logy)
+    ax.set_xscale(logx)
+    ax.set_xlim(xlim)
+    ax.set_xlabel(xun)
+    plt.show()
 
-        plt.suptitle('Time period: %s to %s' % (str(st[0].stats.starttime), str(st[0].stats.endtime)))
-
-        if logx:
-            logx = 'log'
-        else:
-            logx = 'linear'
-        if logy:
-            logy = 'log'
-        else:
-            logy = 'linear'
-
-    specs = []
-    freqs = []
-    for i, st1 in enumerate(st):
-        if sine is False:
-            nfft = int(nextpow2((st1.stats.endtime - st1.stats.starttime) * st1.stats.sampling_rate))
-            spec, freq = mtspec(st1.data, 1./st1.stats.sampling_rate, time_bandwidth=time_bandwidth,
-                                number_of_tapers=number_of_tapers, nfft=nfft)
-        else:
-            st1.taper(max_percentage=0.05, type='cosine')
-            spec, freq = sine_psd(st1.data, 1./st1.stats.sampling_rate)
-        specs.append(spec)
-        freqs.append(freq)
-        if plot:
-            if recsec:
-                ax = axes[i]
-            if xunits == 'Hz':
-                ax.plot(freq, spec, label=st1.id)
-                xun = 'Frequency (Hz)'
-            elif xunits == 'sec':
-                ax.plot(1./freq, spec, label=st1.id)
-                xun = 'Period (sec)'
-            if i == len(st)-1 and recsec is False:
-                plt.legend()
-            elif recsec:
-                plt.legend()
-            if yunits is not None:
-                ax.set_ylabel('Power spectral density (%s)' % yunits)
-            else:
-                ax.set_ylabel('Power spectral density')
-            ax.set_yscale(logy)
-            ax.set_xscale(logx)
-            ax.set_xlim(xlim)
-    if plot:
-        ax.set_xlabel(xun)
-        plt.show()
-
-    return specs, freqs
+    return freqs, amps
 
 
 def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, wlen=None,

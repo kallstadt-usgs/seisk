@@ -245,6 +245,72 @@ def powspecSN(st, stnoise, SNrat=1.5, win=None):
     return freqs, amps, ampmask
 
 
+def multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False):
+    """
+    Output multitaper for stream st
+
+    # TO DO add statistics and optional_output options
+
+    :param st: obspy stream or trace containing data to plot
+    :param number_of_tapers: Number of tapers to use, Defaults to int(2*time_bandwidth) - 1.
+     This is maximum senseful amount. More tapers will have no great influence on the final spectrum but increase the
+     calculation time. Use fewer tapers for a faster calculation.
+    :param time_bandwidth_div: Smoothing amount, should be between 1 and Nsamps/2.
+    :param sine: if True, will use sine_psd instead of multitaper, sine method should be used for sharp cutoffs or
+     deep valleys, or small sample sizes
+    """
+    from mtspec import mtspec, sine_psd
+
+    st = Stream(st)  # turn into a stream object in case st is a trace
+
+    amps = []
+    freqs = []
+    for i, st1 in enumerate(st):
+        if sine is False:
+            nfft = int(nextpow2((st1.stats.endtime - st1.stats.starttime) * st1.stats.sampling_rate))
+            amp, freq = mtspec(st1.data, 1./st1.stats.sampling_rate, time_bandwidth=time_bandwidth,
+                               number_of_tapers=number_of_tapers, nfft=nfft)
+        else:
+            st1.taper(max_percentage=0.05, type='cosine')
+            amp, freq = sine_psd(st1.data, 1./st1.stats.sampling_rate)
+        amps.append(amp)
+        freqs.append(freq)
+    return freqs, amps
+
+
+def multitaperSN(st, stnoise, SNrat=1.5, number_of_tapers=None, time_bandwidth=4., sine=False):
+    """
+    Return masked arrays of multitaper, masking where SNratio is greater than SNrat
+
+    # TO DO add statistics and optional_output options
+
+    :param st: obspy stream or trace containing data to plot
+    :param number_of_tapers: Number of tapers to use, Defaults to int(2*time_bandwidth) - 1.
+     This is maximum senseful amount. More tapers will have no great influence on the final spectrum but increase the
+     calculation time. Use fewer tapers for a faster calculation.
+    :param time_bandwidth_div: Smoothing amount, should be between 1 and Nsamps/2.
+    :param sine: if True, will use sine_psd instead of multitaper, sine method should be used for sharp cutoffs or
+     deep valleys, or small sample sizes
+    """
+    from mtspec import mtspec, sine_psd
+
+    st = Stream(st)  # turn into a stream object in case st is a trace
+
+    amps = []
+    freqs = []
+    for i, st1 in enumerate(st):
+        if sine is False:
+            nfft = int(nextpow2((st1.stats.endtime - st1.stats.starttime) * st1.stats.sampling_rate))
+            amp, freq = mtspec(st1.data, 1./st1.stats.sampling_rate, time_bandwidth=time_bandwidth,
+                               number_of_tapers=number_of_tapers, nfft=nfft)
+        else:
+            st1.taper(max_percentage=0.05, type='cosine')
+            amp, freq = sine_psd(st1.data, 1./st1.stats.sampling_rate)
+        amps.append(amp)
+        freqs.append(freq)
+    return freqs, amps, ampmask
+
+
 def signal_width(st):
     pass
 
@@ -316,30 +382,7 @@ def spectrum(trace, win=None, nfft=None, plot=False, powerspec=False):
     """
     tvec = maketvec(trace)  # Time vector
     dat = trace.data
-    if win is not None:
-        if win[1] > tvec.max() or win[0] < tvec.min():
-            print 'Time window specified not compatible with length of time series'
-            return
-        dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
-        tvec = tvec[(tvec >= win[0]) & (tvec <= win[1])]
-    if nfft is None:
-        nfft = nextpow2(len(dat))
-    if powerspec is False:
-        amps = np.abs(np.fft.rfft(dat, n=nfft))
-        freqs = np.fft.rfftfreq(nfft, 1/trace.stats.sampling_rate)
-    else:
-        amps = np.abs(np.fft.fft(dat, n=nfft))**2
-        freqs = np.fft.fftfreq(nfft, 1/trace.stats.sampling_rate)
-    if plot is True:
-        fig = plt.figure(figsize=(6, 6))
-        ax = fig.gca()
-        ax.plot(freqs, amps)
-        ax.set_xlabel('Frequency (Hz)')
-        if powerspec is False:
-            plt.title('Amplitude Spectrum')
-        else:
-            plt.title('Power Spectrum')
-        plt.show()
+    freqs, amps = spectrum_manual(dat, tvec, win, nfft, plot, powerspec)
     return freqs, amps
 
 
@@ -369,11 +412,11 @@ def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False)
     if nfft is None:
         nfft = nextpow2(len(dat))
     if powerspec is False:
-        amps = np.abs(np.fft.rfft(dat, n=nfft))
+        amps = 2. * np.pi * np.abs(np.fft.rfft(dat, n=nfft)/nfft)
         freqs = np.fft.rfftfreq(nfft, sample_int)
     else:
-        amps = np.abs(np.fft.fft(dat, n=nfft))**2
-        freqs = np.fft.fftfreq(nfft, sample_int)
+        amps = (2. * np.pi * sample_int/nfft) * np.abs(np.fft.rfft(dat, n=nfft))**2.
+        freqs = np.fft.rfftfreq(nfft, sample_int)
     if plot is True:
         plt.plot(freqs, amps)
         if powerspec is False:

@@ -5,6 +5,7 @@ from obspy.core import Stream
 import matplotlib.pyplot as plt
 import numpy.ma as ma
 import scipy.stats as ss
+from scipy.signal import periodogram
 
 
 """
@@ -248,6 +249,7 @@ def powspecSN(st, stnoise, SNrat=1.5, win=None):
 def multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False):
     """
     Output multitaper for stream st
+    RETURNS POWER SPECTRAL DENSITY
 
     # TO DO add statistics and optional_output options
 
@@ -365,7 +367,7 @@ def kurtosis(st, winlen, BaillCF=False):
     return st
 
 
-def spectrum(trace, win=None, nfft=None, plot=False, powerspec=False):
+def spectrum(trace, win=None, nfft=None, plot=False, powerspec=False, scaling='spectrum'):
     """
     Make amplitude spectrum of trace and plot using rfft (for real inputs, no negative frequencies)
     USAGE
@@ -376,17 +378,18 @@ def spectrum(trace, win=None, nfft=None, plot=False, powerspec=False):
     nfft = number of points to use in nfft, default None uses the next power of 2 of length of trace
     plot = True, plot spectrum, False, don't
     powerspec = False for fourier amplitude spectrum, True for power spectrum
+    scaling = if powerspec is True, 'density' or 'spectrum' for power spectral density (V**2/Hz) or power spectrum (V**2)
     OUTPUTS
     freqs = frequency vector, only positive values
     amps = amplitude vector
     """
     tvec = maketvec(trace)  # Time vector
     dat = trace.data
-    freqs, amps = spectrum_manual(dat, tvec, win, nfft, plot, powerspec)
+    freqs, amps = spectrum_manual(dat, tvec, win, nfft, plot, powerspec, scaling)
     return freqs, amps
 
 
-def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False):
+def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False, scaling='spectrum'):
     """
     Make amplitude spectrum of time series and plot using rfft (for real inputs, no negative frequencies)
     USAGE
@@ -398,6 +401,7 @@ def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False)
     nfft = number of points to use in nfft, default None uses the next power of 2 of length of dat
     plot = True, plot spectrum, False, don't
     powerspec = False for fourier amplitude spectrum, True for power spectrum
+    scaling = if powerspec is True, 'density' or 'spectrum' for power spectral density (V**2/Hz) or power spectrum (V**2)
     OUTPUTS
     freqs = frequency vector, only positive values
     amps = amplitude vector
@@ -412,11 +416,12 @@ def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False)
     if nfft is None:
         nfft = nextpow2(len(dat))
     if powerspec is False:
-        amps = 2. * np.pi * np.abs(np.fft.rfft(dat, n=nfft)/nfft)
+        amps = np.abs(np.fft.rfft(dat, n=nfft)/nfft)
         freqs = np.fft.rfftfreq(nfft, sample_int)
     else:
-        amps = (2. * np.pi * sample_int/nfft) * np.abs(np.fft.rfft(dat, n=nfft))**2.
-        freqs = np.fft.rfftfreq(nfft, sample_int)
+        freqs, amps = periodogram(dat, 1/sample_int, nfft=nfft, return_onesided=True, scaling=scaling)
+        #amps = (2. * np.pi * sample_int/nfft) * np.abs(np.fft.rfft(dat, n=nfft))**2.
+        #freqs = np.fft.rfftfreq(nfft, sample_int)
     if plot is True:
         plt.plot(freqs, amps)
         if powerspec is False:

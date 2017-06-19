@@ -372,7 +372,9 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
     return st
 
 
-def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiuskm=0., maxradiuskm=20., channels='*', location='*', source='IRIS'):
+def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiuskm=0., maxradiuskm=20., channels='*',
+               location='*', source='IRIS', attach_response=True, savedat=False, folderdat='data', filenamepref='Data_',
+               loadfromfile=False, reloadfile=False):
     """
     Automatically pull existing data within a certain distance of the epicenter (or any lat/lon coordinates) and attach station coordinates to data
     USAGE
@@ -406,24 +408,50 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
     t1 = UTCDateTime(event_time) + tstart
     t2 = UTCDateTime(event_time) + tend
 
-    inventory = client.get_stations(latitude=event_lat, longitude=event_lon, minradius=minradiuskm/111.32, maxradius=maxradiuskm/111.32, channel=channels, level='channel', startbefore=t1, endafter=t2)
+    inventory = client.get_stations(latitude=event_lat, longitude=event_lon, minradius=minradiuskm/111.32,
+                                    maxradius=maxradiuskm/111.32, channel=channels, level='channel', startbefore=t1,
+                                    endafter=t2)
     temp = inventory.get_contents()
     netnames = temp['networks']
     stas = temp['stations']
     stanames = [n.split('.')[1].split()[0] for n in stas]
 
-    st = getdata(','.join(unique_list(netnames)), ','.join(unique_list(stanames)), location, channels, t1, t2, attach_response=True, clientname=source)
+    if not os.path.exists(folderdat) and savedat is True:
+        os.makedirs(folderdat)
+    #create file name
+    #filename = filenamepref+str(t1)+str(t2)
+    filename = filenamepref+t1.strftime('%Y-%m-%dT%H%M')+'_'+t2.strftime('%Y-%m-%dT%H%M')
+    #see if it exists already
+    if os.path.exists(folderdat+'/'+filename):
+        if loadfromfile is True:
+            choice = 'Y'
+        else:
+            if reloadfile is False:
+                choice = raw_input('file already exists for this time period, enter Y to load from file, N to reload\n')
+            else:
+                choice = 'N'
+    else:
+        choice = 'N'
+    if choice.upper() == 'Y':
+        st = read(folderdat+'/'+filename, format='PICKLE')
+    else:
+        st = getdata(','.join(unique_list(netnames)), ','.join(unique_list(stanames)), location, channels, t1, t2,
+                     attach_response=attach_response, clientname=source)
 
-    if st is None:
-        print('No data returned')
-        return
+        if st is None:
+            print('No data returned')
+            return
 
-    for trace in st:
-        try:
-            coord = inventory.get_coordinates(trace.id)
-            trace.stats.coordinates = AttribDict({'latitude': coord['latitude'], 'longitude': coord['longitude'], 'elevation': coord['elevation']})
-        except:
-            print('Could not attach coordinates for %s' % trace.id)
+        for trace in st:
+            try:
+                coord = inventory.get_coordinates(trace.id)
+                trace.stats.coordinates = AttribDict({'latitude': coord['latitude'], 'longitude': coord['longitude'], 'elevation': coord['elevation']})
+            except:
+                print('Could not attach coordinates for %s' % trace.id)
+
+        if 'st' in locals():
+            if savedat:
+                st.write(folderdat+'/'+filename, format='PICKLE')
 
     return st
 

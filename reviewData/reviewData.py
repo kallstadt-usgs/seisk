@@ -128,7 +128,7 @@ def getdata_exact(stations, t1, t2, attach_response=True,
                   savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
                   loadfromfile=False, reloadfile=False):
     """
-    Same as getdata, but only gets exact station channel combos specified instead of grabbling all (takes longer)
+    Same as getdata, but only gets exact station channel combos specified instead of grabbing all (takes longer)
     Get data from IRIS (or NCEDC) if it exists, save it
     USAGE
     st = getdata(network, station, location, channel, t1, t2, attach_response=True,
@@ -372,7 +372,9 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
     return st
 
 
-def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiuskm=0., maxradiuskm=20., channels='*', location='*', source='IRIS'):
+def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiuskm=0., maxradiuskm=20., channels='*',
+               location='*', source='IRIS', attach_response=True, savedat=False, folderdat='data', filenamepref='Data_',
+               loadfromfile=False, reloadfile=False):
     """
     Automatically pull existing data within a certain distance of the epicenter (or any lat/lon coordinates) and attach station coordinates to data
     USAGE
@@ -387,6 +389,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
     channels = 'strong motion' to get all strong motion channels (excluding low sample rate ones), 'broadband' to get all broadband instruments, 'short period' for all short period channels, otherwise a single line of comma separated channel codes, * wildcards are okay, e.g. channels = '*N*,*L*'
     location = comma separated list of location codes allowed, or '*' for all location codes
     source = FDSN source, 'IRIS', 'NCEDC', 'GEONET' etc., see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
+    cutredundant = cut stations that have more than one channel of the same data, take higher sample rate one
 
     OUTPUTS
     st = obspy stream containing data from within requested area
@@ -406,13 +409,19 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
     t1 = UTCDateTime(event_time) + tstart
     t2 = UTCDateTime(event_time) + tend
 
-    inventory = client.get_stations(latitude=event_lat, longitude=event_lon, minradius=minradiuskm/111.32, maxradius=maxradiuskm/111.32, channel=channels, level='channel', startbefore=t1, endafter=t2)
+    inventory = client.get_stations(latitude=event_lat, longitude=event_lon, minradius=minradiuskm/111.32,
+                                    maxradius=maxradiuskm/111.32, channel=channels, level='channel', startbefore=t1,
+                                    endafter=t2)
     temp = inventory.get_contents()
     netnames = temp['networks']
     stas = temp['stations']
     stanames = [n.split('.')[1].split()[0] for n in stas]
 
-    st = getdata(','.join(unique_list(netnames)), ','.join(unique_list(stanames)), location, channels, t1, t2, attach_response=True, clientname=source)
+    #if cutredundant:
+
+    st = getdata(','.join(unique_list(netnames)), ','.join(unique_list(stanames)), location, channels, t1, t2,
+                 attach_response=attach_response, clientname=source, savedat=savedat, folderdat=folderdat,
+                 filenamepref=filenamepref, loadfromfile=loadfromfile, reloadfile=reloadfile)
 
     if st is None:
         print('No data returned')

@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
 from obspy import read, Stream
-import matplotlib.pyplot as plt
+#import matplotlib
+#matplotlib.use('TkAgg', warn=False, force=True)
 from matplotlib import mlab
+import matplotlib.pyplot as plt
 from obspy.clients.fdsn import Client as FDSN_Client
 from obspy.clients.earthworm import Client as ew_client
 from obspy.signal.invsim import seisSim, cornFreq2Paz
@@ -561,7 +563,6 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
         # Plot data
         try:
             if norm is True:
-                dattrue = dat.copy()
                 yloc = -2.*i
                 maxval = max(np.absolute(dat[mask]))
                 dat = scalfact*dat/maxval
@@ -633,7 +634,8 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     else:
         ax.set_ylim(miny, maxy)
     plt.grid('on')
-    timeprint = st[0].stats.starttime.strftime('%Y-%m-%dT%H:%M:%S.%f')
+    mcs = ('%.2f' % (st[0].stats.starttime.microsecond/10.**6)).replace('0.', '')
+    timeprint = st[0].stats.starttime.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
     if len(st) <= maxtraces:
         title1 = 'Start time: %s (UTC) - %i traces' % (timeprint, len(st))
     else:
@@ -681,10 +683,10 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     return fig
 
 
-def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, recsec=False,
-                    logx=False, logy=False, xunits='Hz', xlim=None, yunits=None):
+def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, recsec=False, labelsize=12,
+                    logx=False, logy=False, xunits='Hz', xlim=None, yunits=None, groupstations=False, colors1=None):
     """
-    Plot multitaper spectra of signals in st
+    Plot multitaper spectra of signals in st, equivalent to power spectral density
 
     # TO DO add statistics and optional_output options
 
@@ -700,19 +702,17 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
     :param logy: if True, will use log scale for y axis
     :param xunits: if 'Hz' x axis will be frequency, if 'sec' x axis will be period
     :param xlim: tuple of xlims like (0., 100.)
-    :param yunits: string defining y units
-    :param plot: if True, will show figure, if False, will just output multitaper results
+    :param yunits: string defining y units - units should be input time series units squared per Hz
+    :param groupstations: only if recsec is True - if True, will plot all channels from same station on one plot
     """
-
+    import random
     st = Stream(st)  # in case it's a trace
     st.detrend('demean')
 
     if recsec:
-        fig, axes = plt.subplots(len(st), sharex=True, sharey=True, figsize=(10, min(10, 2*len(st))))
+        fig, axes = plt.subplots(len(st), sharex=True, sharey=False, figsize=(10, min(10, 2*len(st))))
     else:
         fig, ax = plt.subplots(1, figsize=(8, 5))
-
-    plt.suptitle('Time period: %s to %s' % (str(st[0].stats.starttime), str(st[0].stats.endtime)))
 
     if logx:
         logx = 'log'
@@ -726,35 +726,65 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
     freqs, amps = sigproc.multitaper(st, number_of_tapers=number_of_tapers, time_bandwidth=time_bandwidth, sine=sine)
     i = 0
     for amp, freq in zip(amps, freqs):
+        if colors1 is not None:
+            color = colors1[i]
+        else:
+            color = random.rand(3, 1)
         if recsec:
             ax = axes[i]
-        if xunits == 'Hz':
-            ax.plot(freq, amp, label=st[i].id)
-            xun = 'Frequency (Hz)'
-        elif xunits == 'sec':
-            ax.plot(1./freq, amp, label=st[i].id)
-            xun = 'Period (sec)'
-        if i == len(st)-1 and recsec is False:
-            plt.legend()
-        elif recsec:
-            plt.legend()
-        if yunits is not None:
-            ax.set_ylabel('Power spectral density (%s)' % yunits)
+            if i == np.round(len(st)/2.):
+                if yunits is not None:
+                    ax.set_ylabel('Power spectral density (%s)' % yunits)
+                else:
+                    ax.set_ylabel('Power spectral density')
+            if xunits == 'Hz':
+                ax.plot(freq, amp, label=st[i].id, color=color)
+                xun = 'Frequency (Hz)'
+            elif xunits == 'sec':
+                ax.plot(1./freq, amp, label=st[i].id, color=color)
+                xun = 'Period (sec)'
+            if i == len(st) - 1:
+                ax.set_xlabel(xun, fontsize=labelsize)
+            plt.legend(fontsize=labelsize)
         else:
-            ax.set_ylabel('Power spectral density')
+            if yunits is not None:
+                ax.set_ylabel('Power spectral density (%s)' % yunits)
+            else:
+                ax.set_ylabel('Power spectral density')
+
+            if i == len(st)-1:
+                plt.legend(fontsize=labelsize)
+                ax.set_xlabel(xun, fontsize=labelsize)
+            if xunits == 'Hz':
+                ax.plot(freq, amp, label=st[i].id, color=color)
+                xun = 'Frequency (Hz)'
+            elif xunits == 'sec':
+                ax.plot(1./freq, amp, label=st[i].id, color=color)
+                xun = 'Period (sec)'
+        ax.set_yscale(logy)
+        ax.set_xscale(logx)
+        ax.set_xlim(xlim)
+        ax.tick_params(labelsize=labelsize)
+        if i == 0:
+            mcs = ('%.2f' % (st[0].stats.starttime.microsecond/10.**6)).replace('0.', '')
+            timeprint1 = st[0].stats.starttime.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
+            mcs = ('%.2f' % (st[0].stats.endtime.microsecond/10.**6)).replace('0.', '')
+            timeprint2 = st[0].stats.endtime.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
+            ax.set_title('Time period: %s to %s' % (timeprint1, timeprint2), fontsize=labelsize)
         i += 1
-    ax.set_yscale(logy)
-    ax.set_xscale(logx)
-    ax.set_xlim(xlim)
-    ax.set_xlabel(xun)
+
+    if recsec:
+        plt.subplots_adjust(hspace=0.)  # reduce vertical space between plots
+        plt.setp([a.get_xticklabels() for a in fig.axes[:-1]], visible=False)  # Turn of x labels where not needed
+
     plt.show()
 
     return freqs, amps
 
 
-def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, wlen=None,
-                     overperc=0.85, log1=True, maxPower=1000000, minPower=1, freqmax=25,
-                     colorb=False):
+def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, wlen=None, norm=True,
+                     overperc=0.85, log1=True, maxPower=None, minPower=None, freqmax=None,
+                     colorb=False, labelsize=12, figsize=None):
     """
     Plot spectrogram (opens new figure)
     USAGE
@@ -781,12 +811,26 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
     TO DO
     if view window is longer than a certain number of seconds, change to minutes or hours
     """
+    if figsize is None:
+        figsize = (12, min(15, 2*maxtraces))
     maxtraces = min(len(st), maxtraces)
-    fig, axes = plt.subplots(maxtraces, sharex=True, sharey=True, figsize=(10, min(10, 2*maxtraces)))
-    plt.suptitle('Start time: '+str(st[0].stats.starttime))
+    fig, axes = plt.subplots(maxtraces, sharex=True, sharey=False, figsize=figsize)
+    mcs = ('%.2f' % (st[0].stats.starttime.microsecond/10.**6)).replace('0.', '')
+    timeprint = st[0].stats.starttime.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
+    title1 = 'Start time: %s (UTC)' % timeprint
+    if norm:
+        title1 = title1 + ' - normalized to maxes'
+    else:
+        title1 = title1 + ' - same amplitudes'
+    if norm is False:
+        maxP = np.max(np.abs(st.max()))**2.
+        minP = maxP/1e6
+        vmin = minP
+        vmax = maxP
+
     for i, st1 in enumerate(st[indfirst:indfirst+maxtraces]):
         if wlen is None:
-            wlen = st1.stats.sampling_rate/100.
+            wlen = st1.stats.sampling_rate/25.
         NFFT = int(nextpow2(wlen*st1.stats.sampling_rate))
         noverlap = int(overperc*NFFT)
         Pxx, freq, time = mlab.specgram(st1.data, NFFT=NFFT, Fs=st1.stats.sampling_rate,
@@ -798,42 +842,51 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
         halfbin_freq = (freq[1] - freq[0]) / 2.0
         extent = (time[0] - halfbin_time, time[-1] + halfbin_time,
                   freq[0] - halfbin_freq, freq[-1] + halfbin_freq)
-        if st1.stats.channel in 'BHZ,BHN,BHE,HHN,HHE,HHZ,HH1,HH2,BH1,BH2' and maxPower is not None and minPower is not None:
-            maxP = maxPower*100
-            minP = minPower*100
-        else:
-            maxP = maxPower
-            minP = minPower
 
-        if maxPower is None or minPower is None:
-            vmin = None
-            vmax = None
-        else:
-            vmin = minP
-            vmax = maxP
+        if norm:
+            if maxPower is None:
+                maxP = np.abs(st1.max())**2.
+                vmax = maxP
+            else:
+                vmax = None
+            if minPower is None:
+                minP = maxP/1e6
+                vmin = minP
+            else:
+                vmin = None
 
-        if log1 is True and maxPower is not None and minPower is not None:
+        if log1 is True:
             vmin = np.log10(minP)
             vmax = np.log10(maxP)
 
+        ylims = (0, st1.stats.sampling_rate/2.)
         if log1 is True:
             im = axes[i].imshow(np.log10(Pxx), interpolation="nearest", extent=extent,
                                 vmin=vmin, vmax=vmax)
         else:
             im = axes[i].imshow(Pxx, interpolation="nearest", extent=extent,
                                 vmin=vmin, vmax=vmax)
+        if i == 0:
+            axes[i].set_title(title1, fontsize=labelsize + 1)
         axes[i].axis('tight')
         axes[i].grid(True)
-        axes[i].set_ylim([0, freqmax])
-        axes[i].set_ylabel(st1.stats.station + '.' + st1.stats.channel)
-    plt.subplots_adjust(hspace=0)  # no vertical space between plots
+        axes[i].tick_params(labelright=True, labelsize=labelsize)
+        if freqmax is None:
+            axes[i].set_ylim(ylims)
+        else:
+            axes[i].set_ylim([0, freqmax])
+        axes[i].set_ylabel(st1.stats.station + '.' + st1.stats.channel, fontsize=labelsize)
+    plt.subplots_adjust(hspace=0.3)  # reduce vertical space between plots
     plt.setp([a.get_xticklabels() for a in fig.axes[:-1]], visible=False)
-    plt.xlabel('Time (sec)')
+    axes[-1].tick_params(axis='both', which='major')
+    plt.xlabel('Time (sec)', fontsize=labelsize)
     if colorb is True and maxPower is not None and minPower is not None:
         plt.subplots_adjust(right=0.8)  # make room for colorbar
         cbar_ax = fig.add_axes([0.85, 0.15, 0.03, 0.7])
         fig.colorbar(im, cax=cbar_ax)
+
     plt.show()
+    #plt.tight_layout()
     return fig, axes
 
 

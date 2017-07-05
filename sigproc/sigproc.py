@@ -249,7 +249,7 @@ def powspecSN(st, stnoise, SNrat=1.5, win=None):
 def multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False):
     """
     Output multitaper for stream st
-    RETURNS POWER SPECTRAL DENSITY
+    RETURNS POWER SPECTRAL DENSITY, units = input units **2 per Hz
 
     # TO DO add statistics and optional_output options
 

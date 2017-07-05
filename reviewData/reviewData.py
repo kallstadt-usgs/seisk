@@ -437,7 +437,10 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
     return st
 
 
-def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None, figsize=None):
+def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10,
+           textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, labelquickdraw=True,
+           processing=None, figsize=None, colors=None, labelsize=12., addscale=False, unitlabel=None, convert=1.,
+           scaleperc=0.9):
     """
     Plot record section of data from an obspy stream
     USAGE
@@ -458,6 +461,12 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     quickdraw = Uses obsPy's minmax plot method to make plotting much faster if there are more than 30 samples per pixel on the plot
     processing = True to show processing history, otherwise None
     figsize = tuple of figure size in inches e.g., (10, 10) is 10x10inches, (width, height)
+    colors = list of colors to apply to each trace
+    labelsize = font size for labels
+    addscale = add a scale bar to each trace showing the amplitudes
+    unitlabel = Label for scale bar
+    convert = Factor to multipy by to convert data amplitudes into unitlabel units (e.g. to convert m/s to mm/s, convert=10**3)
+    scalebarperc = percent of total axis width over from left edge of plot to place scale bar
 
     OUTPUTS
     fig = handle of figure
@@ -468,9 +477,12 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
         print('st is empty')
         return
     #set up color cycling
-    colors_ = ['r', 'b', 'g', 'm', 'k', 'c']
-    rep = int(np.ceil(float(len(st))/float(len(colors_))))*colors_
-    rep = rep[0:len(st)]
+    if colors is None or len(colors) != len(st):
+        colors_ = ['r', 'b', 'g', 'm', 'k', 'c']
+        rep = int(np.ceil(float(len(st))/float(len(colors_))))*colors_
+        rep = rep[0:len(st)]
+    else:
+        rep = colors
 
     if update is False:
         if figsize is None:
@@ -529,7 +541,8 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
             extreme_values = np.empty((pixel_count, 2), dtype=np.float)
             extreme_values[:, 0] = min_
             extreme_values[:, 1] = max_
-            x_values = np.linspace(0, (extreme_values.shape[0]-1)*(pixel_length/st1.stats.sampling_rate), num=extreme_values.shape[0])
+            x_values = np.linspace(0, (extreme_values.shape[0]-1)*(pixel_length/st1.stats.sampling_rate),
+                                   num=extreme_values.shape[0])
             tvec = np.repeat(x_values, 2) + tdiff
             dat = extreme_values.flatten()
             mask = ((tvec > xlim[0]) & (tvec < xlim[1]))
@@ -543,57 +556,95 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
             staname = ('%s - %2.1f km') % (temp, st1.stats.rdist)
         except:
             staname = st1.stats.station+'.'+st1.stats.channel+'.'+st1.stats.location+'.'+st1.stats.network
-
+        # get x location of scale bar to apply to all
+        xerrloc = tvec.min() + ((tvec.max()-tvec.min()) * scaleperc)
+        # Plot data
         try:
             if norm is True:
-                dat = scalfact*dat/max(np.absolute(dat[mask]))
+                dattrue = dat.copy()
+                yloc = -2.*i
+                maxval = max(np.absolute(dat[mask]))
+                dat = scalfact*dat/maxval
                 if update is False:
-                    ax.plot(tvec[mask], np.add(dat[mask], -2.*i), color1)
+                    ax.plot(tvec[mask], np.add(dat[mask], yloc), color1)
                 elif update is True:
-                    ax.lines[i].set_data(tvec[mask], np.add(dat[mask], -2*i))
+                    ax.lines[i].set_data(tvec[mask], np.add(dat[mask], yloc))
                     ax.lines[i].set_color(color1)
-                tempmax = np.add(dat[mask], -2.*i).max()
-                tempmin = np.add(dat[mask], -2.*i).min()
+                tempmax = np.add(dat[mask], yloc).max()
+                tempmin = np.add(dat[mask], yloc).min()
                 if tempmax > maxy:
                     maxy = tempmax
                 if tempmin < miny:
                     miny = tempmin
-                yticks1.append(-2*i)
+                yticks1.append(yloc)
                 labels.append(staname)
-                fig.stationsy[-2*i] = staname
+                fig.stationsy[yloc] = staname
+                if addscale:
+                    ax.errorbar(xerrloc, yloc, yerr=0.5, color='0.5')
+                    # place labels
+                    label1 = '  -%.1E' % (0.5*maxval * convert)
+                    label1 = label1.lower().replace('+', '').replace('e0', 'e')
+                    label2 = '   %.1E' % (0.5*maxval * convert)
+                    label2 = label2.lower().replace('+', '').replace('e0', 'e')
+                    ax.text(xerrloc, yloc + 0.5, label2, color='0.5', fontsize=11, horizontalalignment='left', verticalalignment='center')
+                    ax.text(xerrloc, yloc - 0.5, label1, color='0.5', fontsize=11, horizontalalignment='left', verticalalignment='bottom')
             else:
+                yloc = -2.*avgmax*i
                 dat = scalfact*dat
+                maxval = max(np.absolute(dat[mask]))
                 if update is False:
-                    ax.plot(tvec[mask], np.add(dat[mask], -2.*avgmax*i), color1)
+                    ax.plot(tvec[mask], np.add(dat[mask], yloc), color1)
                 elif update is True:
-                    ax.lines[i].set_data(tvec[mask], np.add(dat[mask], -2.*avgmax*i))
+                    ax.lines[i].set_data(tvec[mask], np.add(dat[mask], yloc))
                     ax.lines[i].set_color(color1)
-                tempmax = np.add(dat, -2.*avgmax*i).max()
-                tempmin = np.add(dat, -2.*avgmax*i).min()
+                tempmax = np.add(dat, yloc).max()
+                tempmin = np.add(dat, yloc).min()
                 if tempmax > maxy:
                     maxy = tempmax
                 if tempmin < miny:
                     miny = tempmin
-                yticks1.append(-2*avgmax*i)
+                yticks1.append(yloc)
                 labels.append(staname)
-                fig.stationsy[-2*avgmax*i] = staname
+                fig.stationsy[yloc] = staname
+                if addscale:
+                    if i == 0:
+                        ax.errorbar(xerrloc, yloc, yerr=0.5*maxval, color='0.5')
+                        # place labels
+                        label1 = '  -%.1E' % (0.5*maxval/scalfact * convert)
+                        label1 = label1.lower().replace('+', '').replace('e0', 'e').replace('e-0', 'e-')
+                        label2 = '   %.1E' % (0.5*maxval/scalfact * convert)
+                        label2 = label2.lower().replace('+', '').replace('e0', 'e').replace('e-0', 'e-')
+                        ax.text(xerrloc, yloc + 0.5*maxval, label2, color='0.5', fontsize=11, horizontalalignment='left', verticalalignment='center')
+                        ax.text(xerrloc, yloc - 0.5*maxval, label1, color='0.5', fontsize=11, horizontalalignment='left', verticalalignment='bottom')
         except:
             missing += 1
         i += 1
     if missing == len(st):
         print 'nothing to see over here, go back'
     plt.tick_params(left='off', right='off')
-    plt.xlabel('Time (sec)')  # plt.xlabel(xlab)
+    plt.tick_params(axis='both', which='major', labelsize=labelsize)
+    plt.xlabel('Time (sec)', fontsize=labelsize)  # plt.xlabel(xlab)
     plt.autoscale(enable=True, axis='y', tight=True)
     plt.yticks(yticks1)
-    ax.set_yticklabels(labels)
+    ax.set_yticklabels(labels, fontsize=labelsize)
     ax.set_xlim(xlim[0], xlim[1])
     if ylim is not None:
         ax.set_ylim(ylim[0], ylim[1])
     else:
         ax.set_ylim(miny, maxy)
     plt.grid('on')
-    plt.title('Start time: %s  - Traces %i through %i of %i' % (str(st[0].stats.starttime), indfirst+1, indfirst+maxtraces, len(st)))
+    timeprint = st[0].stats.starttime.strftime('%Y-%m-%dT%H:%M:%S.%f')
+    if len(st) <= maxtraces:
+        title1 = 'Start time: %s (UTC) - %i traces' % (timeprint, len(st))
+    else:
+        title1 = 'Start time: %s (UTC)  - Traces %i through %i of %i' % (timeprint, indfirst+1, indfirst+maxtraces, len(st))
+    if addscale is True and unitlabel is not None:
+        title1 = title1 + ' - Units = %s' % unitlabel
+    if norm:
+        title1 = title1 + ' - normalized to maxes'
+    else:
+        title1 = title1 + ' - same amplitudes'
+    plt.title(title1, fontsize=labelsize + 1.)
     if hasattr(st[0].stats, 'processing'):
         proc = wrap('PROCESSING HISTORY: %s' % ' - '.join(st[0].stats.processing[0:]), 50)
     else:
@@ -615,10 +666,11 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
         axbox.text(0.01, 0.99, '\n'.join(textline[-5:]), transform=axbox.transAxes, fontsize=12, verticalalignment='top')
 
     props1 = dict(facecolor='white', alpha=1)
-    if quickdraw is True and flag == 1:
-        ax.annotate('qd on ', xy=(0.9, 0.95), xycoords='axes fraction', bbox=props1)
-    elif quickdraw is True and flag == 0:
-        ax.annotate('qd off', xy=(0.9, 0.95), xycoords='axes fraction', bbox=props1)
+    if labelquickdraw:
+        if quickdraw is True and flag == 1:
+            ax.annotate('qd on ', xy=(0.9, 0.95), xycoords='axes fraction', bbox=props1)
+        elif quickdraw is True and flag == 0:
+            ax.annotate('qd off', xy=(0.9, 0.95), xycoords='axes fraction', bbox=props1)
 
     if update is False:
         plt.show()

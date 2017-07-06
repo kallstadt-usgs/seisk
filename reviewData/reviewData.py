@@ -684,7 +684,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
 
 
 def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, recsec=False, labelsize=12,
-                    logx=False, logy=False, xunits='Hz', xlim=None, yunits=None, groupstations=False, colors1=None):
+                    logx=False, logy=False, xunits='Hz', xlim=None, ylim=None, yunits=None, colors1=None):
     """
     Plot multitaper spectra of signals in st, equivalent to power spectral density
 
@@ -710,7 +710,9 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
     st.detrend('demean')
 
     if recsec:
-        fig, axes = plt.subplots(len(st), sharex=True, sharey=False, figsize=(10, min(10, 2*len(st))))
+        stas = unique_list([trace.stats.station for trace in st])
+        lent = len(stas)
+        fig, axes = plt.subplots(lent, sharex=True, sharey=False, figsize=(10, min(10, 2*lent)))
     else:
         fig, ax = plt.subplots(1, figsize=(8, 5))
 
@@ -731,21 +733,29 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
         else:
             color = random.rand(3, 1)
         if recsec:
-            ax = axes[i]
-            if i == np.round(len(st)/2.):
+            ind = stas.index(st[i].stats.station)
+            ax = axes[ind]
+            if st[i].stats.channel[-1] == 'Z':
+                linestyle = '-'
+            elif st[i].stats.channel[-1] == 'N' or st[i].stats.channel[-1] == '1':
+                linestyle = '--'
+            else:
+                linestyle = ':'
+
+            if ind == np.round(lent/2.):
                 if yunits is not None:
                     ax.set_ylabel('Power spectral density (%s)' % yunits)
                 else:
                     ax.set_ylabel('Power spectral density')
             if xunits == 'Hz':
-                ax.plot(freq, amp, label=st[i].id, color=color)
+                ax.plot(freq, amp, label=st[i].id, color=color, linestyle=linestyle)
                 xun = 'Frequency (Hz)'
             elif xunits == 'sec':
-                ax.plot(1./freq, amp, label=st[i].id, color=color)
+                ax.plot(1./freq, amp, label=st[i].id, color=color, linestyle=linestyle)
                 xun = 'Period (sec)'
-            if i == len(st) - 1:
+            if i == lent - 1:
                 ax.set_xlabel(xun, fontsize=labelsize)
-            plt.legend(fontsize=labelsize)
+            ax.legend(fontsize=labelsize - 2.)
         else:
             if yunits is not None:
                 ax.set_ylabel('Power spectral density (%s)' % yunits)
@@ -764,6 +774,7 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
         ax.set_yscale(logy)
         ax.set_xscale(logx)
         ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
         ax.tick_params(labelsize=labelsize)
         if i == 0:
             mcs = ('%.2f' % (st[0].stats.starttime.microsecond/10.**6)).replace('0.', '')

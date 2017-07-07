@@ -250,7 +250,7 @@ def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_respo
             if sta[1] in okchannels or okchannels == '*':
                 try:
                     client = ew_client(clientname, port)
-                    temp = client.getWaveform(sta[2], sta[0], '', sta[1], t1, t2)
+                    temp = client.get_waveforms(sta[2], sta[0], '', sta[1], t1, t2)
                     for tr in temp:
                         tr.data = tr.data.astype(float)
                     temp.merge(fill_value=0.)
@@ -277,8 +277,11 @@ def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_respo
                 if savedat:
                     st.write(folderdat+'/'+filename, format='PICKLE')
                 print st
-
-    return st
+                return st
+            else:
+                print('No data returned')
+        else:
+            print('No data returned')
 
 
 def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_response=False, savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False):

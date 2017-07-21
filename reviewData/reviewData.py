@@ -478,6 +478,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     """
     try:
         maxtraces = min(len(st), maxtraces)
+        maxtraces = int(maxtraces)
     except Exception:
         print('st is empty')
         return

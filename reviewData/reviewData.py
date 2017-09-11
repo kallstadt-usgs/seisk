@@ -27,7 +27,7 @@ Written by kallstadt@usgs.gov
 
 def getdata(network, station, location, channel, t1, t2, attach_response=True,
             savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
-            loadfromfile=False, reloadfile=False, detrend='linear', merge=True, fill_value=0.):
+            loadfromfile=False, reloadfile=False, detrend='demean', merge=True, fill_value=0.):
     """
     Get data from IRIS (or NCEDC) if it exists, save it
     USAGE
@@ -107,7 +107,7 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
                     #finally:
                     #    print('%s would not merge - deleting it') % (sta,)
                 st = st_new
-            st.detrend('linear')
+            st.detrend('demean')
             #find min start time
             mint = min([trace.stats.starttime for trace in st])
             st.trim(starttime=mint, pad=True, fill_value=0)
@@ -135,7 +135,7 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
 
 def getdata_exact(stations, t1, t2, attach_response=True,
                   savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
-                  loadfromfile=False, reloadfile=False, detrend='linear', merge=True, fill_value=0.):
+                  loadfromfile=False, reloadfile=False, detrend='demean', merge=True, fill_value=0.):
     """
     Same as getdata, but only gets exact station channel combos specified instead of grabbing all (takes longer)
     Get data from IRIS (or NCEDC) if it exists, save it
@@ -200,7 +200,7 @@ def getdata_exact(stations, t1, t2, attach_response=True,
                 except Exception as e:
                     print e
                     print('failed to grab data from %s, moving on') % (statup,)
-            st.detrend('linear')
+            st.detrend('demean')
             #find min start time
             mint = min([trace.stats.starttime for trace in st])
             st.trim(starttime=mint, pad=True, fill_value=0)
@@ -216,7 +216,7 @@ def getdata_exact(stations, t1, t2, attach_response=True,
 
 def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_response=True,
                     savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False,
-                    detrend='linear', merge=True, fill_value=0.):
+                    detrend='demean', merge=True, fill_value=0.):
     """
     Get data from winston waveserver
     USAGE
@@ -306,7 +306,7 @@ def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_respo
 
 
 def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_response=False, savedat=False,
-                folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False, detrend='linear',
+                folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False, detrend='demean',
                 merge=True, fill_value=0.):
     """
     Read in sac or mseed files
@@ -1158,7 +1158,7 @@ class InteractivePlot:
                     print('Filtering current data between %1.2f and %1.2f Hz' % (self.input1, self.input2))
                     self.print1.append('> Filtering current data between %1.2f and %1.2f Hz' % (self.input1, self.input2))
                     self.number = ''
-                    self.st_current.detrend('linear')
+                    self.st_current.detrend('demean')
                     if self.taper is not None:
                         self.st_current.taper(max_percentage=self.taper, type='cosine')
                     self.st_current.filter('bandpass', freqmin=self.input1, freqmax=self.input2,
@@ -1390,7 +1390,7 @@ class InteractivePlot:
         if event.key.upper() == 'C':  # do station correction and replot
             try:
                 self.st_current = self.st.copy()
-                self.st_current.detrend('linear')
+                self.st_current.detrend('demean')
                 if self.taper is not None:
                     self.st_current.taper(max_percentage=self.taper, type='cosine')
                 try:
@@ -1399,7 +1399,7 @@ class InteractivePlot:
                 except:
                     print('Failed to do bulk station correction, trying one at a time')
                     self.st_current = self.st.copy()  # Start with fresh data
-                    self.st_current.detrend('linear')
+                    self.st_current.detrend('demean')
                     if self.taper is not None:
                         self.st_current.taper(max_percentage=self.taper, type='cosine')
                     removeid = []

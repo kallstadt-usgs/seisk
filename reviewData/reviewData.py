@@ -27,7 +27,7 @@ Written by kallstadt@usgs.gov
 
 def getdata(network, station, location, channel, t1, t2, attach_response=True,
             savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
-            loadfromfile=False, reloadfile=False):
+            loadfromfile=False, reloadfile=False, detrend='linear', merge=True, fill_value=0.):
     """
     Get data from IRIS (or NCEDC) if it exists, save it
     USAGE
@@ -48,6 +48,11 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
     filenamepref - prefix for filename, if you are saving data
     clientname - source of data from FDSN webservices: 'IRIS','NCEDC', 'GEONET' etc. - see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
     loadfromfile - True or False - if a file from this time period is already on the computer, if you say True, it will automatically use that file without asking if you want to use it
+    reloadfile - if True, will reload locally saved file without asking first
+    detrend - method to use for detrending all traces (before merging), if None, no detrending will be applied
+    merge - if True, will try to merge all traces and will fill with fill_value
+    fill_value - fill value for any gaps while merging
+
 
     OUTPUTS
     st_ordered - ObsPy stream object that is in the same order as input station list
@@ -79,8 +84,10 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
             # if any have integer data, turn into float
             for tr in st:
                 tr.data = tr.data.astype(float)
+            if detrend is not None:
+                st.detrend(detrend)
             try:
-                st.merge(fill_value=0.)
+                st.merge(fill_value=fill_value)
             except:
                 print 'bulk merge failed, trying station by station'
                 st_new = Stream()
@@ -88,14 +95,14 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
                 for sta in stationlist:
                     temp = st.select(station=sta)
                     try:
-                        temp.merge(fill_value=0.)
+                        temp.merge(fill_value=fill_value)
                         st_new += temp
                     except:
                         # Try resampling
                         sr = [tr.stats.sampling_rate for tr in temp]
                         news = mode(sr)[0][0]
                         temp.resample(news)
-                        temp.merge(fill_value=0.)
+                        temp.merge(fill_value=fill_value)
                         st_new += temp
                     #finally:
                     #    print('%s would not merge - deleting it') % (sta,)
@@ -128,7 +135,7 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
 
 def getdata_exact(stations, t1, t2, attach_response=True,
                   savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
-                  loadfromfile=False, reloadfile=False):
+                  loadfromfile=False, reloadfile=False, detrend='linear', merge=True, fill_value=0.):
     """
     Same as getdata, but only gets exact station channel combos specified instead of grabbing all (takes longer)
     Get data from IRIS (or NCEDC) if it exists, save it
@@ -147,6 +154,10 @@ def getdata_exact(stations, t1, t2, attach_response=True,
     filenamepref - prefix for filename, if you are saving data
     clientname - source of data from FDSN webservices: 'IRIS','NCEDC', 'GEONET' etc. - see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
     loadfromfile - True or False - if a file from this time period is already on the computer, if you say True, it will automatically use that file without asking if you want to use it
+    reloadfile - if True, will reload locally saved file without asking first
+    detrend - method to use for detrending all traces (before merging), if None, no detrending will be applied
+    merge - if True, will try to merge all traces and will fill with fill_value
+    fill_value - fill value for any gaps while merging
 
     OUTPUTS
     st_ordered - ObsPy stream object that is in the same order as input station list
@@ -181,7 +192,10 @@ def getdata_exact(stations, t1, t2, attach_response=True,
                                 # if any have integer data, turn into float
                     for tr in sttemp:
                         tr.data = tr.data.astype(float)
-                    sttemp.merge(fill_value=0.)
+                    if detrend is not None:
+                        sttemp.detrend(detrend)
+                    if merge:
+                        sttemp.merge(fill_value=fill_value)
                     st += sttemp.copy()
                 except Exception as e:
                     print e
@@ -201,7 +215,8 @@ def getdata_exact(stations, t1, t2, attach_response=True,
 
 
 def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_response=True,
-                    savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False):
+                    savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False,
+                    detrend='linear', merge=True, fill_value=0.):
     """
     Get data from winston waveserver
     USAGE
@@ -219,6 +234,10 @@ def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_respo
     clientname - winston waveserver to get data from
     port - port number
     loadfromfile - True or False - if a file from this time period is already on the computer, if you say True, it will automatically use that file without asking if you want to use it
+    reloadfile - if True, will reload locally saved file without asking first
+    detrend - method to use for detrending all traces (before merging), if None, no detrending will be applied
+    merge - if True, will try to merge all traces and will fill with fill_value
+    fill_value - fill value for any gaps while merging
 
     OUTPUTS
     st - ObsPy stream object that is in the same order as input station list
@@ -253,8 +272,10 @@ def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_respo
                     temp = client.get_waveforms(sta[2], sta[0], '', sta[1], t1, t2)
                     for tr in temp:
                         tr.data = tr.data.astype(float)
-                    temp.merge(fill_value=0.)
-                    temp.detrend('linear')
+                    if detrend is not None:
+                        temp.detrend(detrend)
+                    if merge:
+                        temp.merge(fill_value=fill_value)
                     if flag == 0:
                         st = temp
                         flag = 1
@@ -284,7 +305,9 @@ def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_respo
             print('No data returned')
 
 
-def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_response=False, savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False):
+def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_response=False, savedat=False,
+                folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False, detrend='linear',
+                merge=True, fill_value=0.):
     """
     Read in sac or mseed files
     USAGE
@@ -298,6 +321,12 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
     savedat - True or False, save data locally so it doesn't need to be redownloaded to look at it again?
     folderdat - folder in which to save data, if you save it
     filenamepref - prefix for filename, if you are saving data
+    loadfromfile - True or False - if a file from this time period is already on the computer, if you say True, it will automatically use that file without asking if you want to use it
+    reloadfile - if True, will reload locally saved file without asking first
+    detrend - method to use for detrending all traces (before merging), if None, no detrending will be applied
+    merge - if True, will try to merge all traces and will fill with fill_value
+    fill_value - fill value for any gaps while merging
+
     OUTPUTS
     st - ObsPy stream object that is in the same order as input station list
     """
@@ -343,31 +372,33 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
                 print 'could not read %s, skipping to next file name' % file1
         for tr in st:
             tr.data = tr.data.astype(float)
-        try:
-            st.merge(fill_value=0.)
-        except:
-            print 'bulk merge failed, trying station by station'
-            st_new = Stream()
-            stationlist = unique_list([trace.stats.station for trace in st])
-            for sta in stationlist:
-                temp = st.select(station=sta)
-                for tr in temp:
-                    tr.data = tr.data.astype(float)
-                try:
-                    temp.merge(fill_value=0.)
-                    st_new += temp
-                except:
-                    # Try resampling
-                    sr = [tr.stats.sampling_rate for tr in temp]
-                    news = mode(sr)[0][0]
-                    temp.resample(news)
-                    temp.merge(fill_value=0.)
-                    st_new += temp
-                finally:
-                    print('%s would not merge - deleting it') % (sta,)
-            st = st_new
+        if detrend is not None:
+            st.detrend(detrend)
+        if merge:
+            try:
+                st.merge(fill_value=fill_value)
+            except:
+                print 'bulk merge failed, trying station by station'
+                st_new = Stream()
+                stationlist = unique_list([trace.stats.station for trace in st])
+                for sta in stationlist:
+                    temp = st.select(station=sta)
+                    for tr in temp:
+                        tr.data = tr.data.astype(float)
+                    try:
+                        temp.merge(fill_value=fill_value)
+                        st_new += temp
+                    except:
+                        # Try resampling
+                        sr = [tr.stats.sampling_rate for tr in temp]
+                        news = mode(sr)[0][0]
+                        temp.resample(news)
+                        temp.merge(fill_value=fill_value)
+                        st_new += temp
+                    finally:
+                        print('%s would not merge - deleting it') % (sta,)
+                st = st_new
         if starttime or endtime:
-            st.detrend('demean')
             st.trim(starttime=starttime, endtime=endtime, pad=True, fill_value=0)
         else:  # find min start time and trim all to same point
             mint = min([trace.stats.starttime for trace in st])
@@ -379,7 +410,8 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
 
 def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiuskm=0., maxradiuskm=20., channels='*',
                location='*', source='IRIS', attach_response=True, savedat=False, folderdat='data', filenamepref='Data_',
-               loadfromfile=False, reloadfile=False):
+               loadfromfile=False, reloadfile=False, detrend=None,
+               merge=False, fill_value=0.):
     """
     Automatically pull existing data within a certain distance of the epicenter (or any lat/lon coordinates) and attach station coordinates to data
     USAGE
@@ -390,11 +422,20 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
     event_time = Event time in UTC in any format obspy's UTCDateTime can parse - e.g. '2016-02-05T19:57:26'
     tstart = number of seconds to add to event time for start time of data (use negative number to start before event_time)
     tend = number of seconds to add to event time for end time of data
-    radiuskm = radius to search for data
+    minradiuskm = minium of radius to search for data
+    maxradiuskm = maximum of radius to search for data
     channels = 'strong motion' to get all strong motion channels (excluding low sample rate ones), 'broadband' to get all broadband instruments, 'short period' for all short period channels, otherwise a single line of comma separated channel codes, * wildcards are okay, e.g. channels = '*N*,*L*'
     location = comma separated list of location codes allowed, or '*' for all location codes
     source = FDSN source, 'IRIS', 'NCEDC', 'GEONET' etc., see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
-    cutredundant = cut stations that have more than one channel of the same data, take higher sample rate one
+    attach_response - True or False, attach station response info?
+    savedat - True or False, save data locally so it doesn't need to be redownloaded to look at it again?
+    folderdat - folder in which to save data, if you save it
+    filenamepref - prefix for filename, if you are saving data
+    loadfromfile - True or False - if a file from this time period is already on the computer, if you say True, it will automatically use that file without asking if you want to use it
+    reloadfile - if True, will reload locally saved file without asking first
+    detrend - method to use for detrending all traces (before merging), if None, no detrending will be applied
+    merge - if True, will try to merge all traces and will fill with fill_value
+    fill_value - fill value for any gaps while merging
 
     OUTPUTS
     st = obspy stream containing data from within requested area
@@ -432,6 +473,32 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
         print('No data returned')
         return
 
+    if detrend is not None:
+        st.detrend(detrend)
+    if merge:
+        try:
+            st.merge(fill_value=fill_value)
+        except:
+            print 'bulk merge failed, trying station by station'
+            st_new = Stream()
+            stationlist = unique_list([trace.stats.station for trace in st])
+            for sta in stationlist:
+                temp = st.select(station=sta)
+                for tr in temp:
+                    tr.data = tr.data.astype(float)
+                try:
+                    temp.merge(fill_value=fill_value)
+                    st_new += temp
+                except:
+                    # Try resampling
+                    sr = [tr.stats.sampling_rate for tr in temp]
+                    news = mode(sr)[0][0]
+                    temp.resample(news)
+                    temp.merge(fill_value=fill_value)
+                    st_new += temp
+                finally:
+                    print('%s would not merge - deleting it') % (sta,)
+            st = st_new
     for trace in st:
         try:
             coord = inventory.get_coordinates(trace.id)
@@ -837,11 +904,6 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
         title1 = title1 + ' - normalized to maxes'
     else:
         title1 = title1 + ' - same amplitudes'
-    if norm is False:
-        maxP = np.max(np.abs(st.max()))**2.
-        minP = maxP/1e6
-        vmin = minP
-        vmax = maxP
 
     for i, st1 in enumerate(st[indfirst:indfirst+maxtraces]):
         if wlen is None:
@@ -858,6 +920,9 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
         extent = (time[0] - halfbin_time, time[-1] + halfbin_time,
                   freq[0] - halfbin_freq, freq[-1] + halfbin_freq)
 
+        minP = None
+        maxP = None
+
         if norm:
             if maxPower is None:
                 maxP = np.abs(st1.max())**2.
@@ -869,8 +934,13 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
                 vmin = minP
             else:
                 vmin = None
+        else:
+            maxP = np.max(np.abs(st.max()))**2.
+            minP = maxP/1e6
+            vmin = minP
+            vmax = maxP
 
-        if log1 is True:
+        if log1 is True and minP is not None and maxP is not None:
             vmin = np.log10(minP)
             vmax = np.log10(maxP)
 
@@ -911,7 +981,7 @@ class InteractivePlot:
     USAGE:
     zp = reviewData.InteractivePlot(st, fig=None, indfirst=0, maxtraces=10, norm=True, xlim=None, ylim=None, scalfact=1.,
                  cosfilt=(0.01, 0.02, 20, 30), water_level=60, output='VEL', textline=['>', '>', '>', '>', '>'],
-                 menu=None, quickdraw=True, processing=None):
+                 menu=None, quickdraw=True, processing=None, taper=0.05):
 
     INPUTS
     see recsec for recsec inputs
@@ -922,6 +992,11 @@ class InteractivePlot:
     cosfilt = cosine filter used for station corrections, tuple of four floats defining corners of cosine in Hz, e.g. (0.01, 0.02, 20., 30.), set to None for no pre-filtering
     water_level = water level, in dB, for station corrections
     output = units of output, 'VEL', 'DISP' or 'ACC'
+    textline = lines of text that will show when plot is first opened
+    menu = if None, will show default menu, otherwise will show menu
+    quickdraw = if True, will downsample strategically to speed up plotting
+    processing = if None, won't show the processing that has been applied to the data, otherwise will show whatever is entered for processing
+    taper = taper to apply before filtering, if None, no tapering will be applied (default 0.05, 5% taper)
 
     OUTPUTS - everything that is stored in self (called zp in above example) can be accessed after exiting, here are a few of the most useful ones
     zp.st_current = processed data in time window that was used
@@ -940,7 +1015,7 @@ class InteractivePlot:
 
     def __init__(self, st, fig=None, indfirst=0, maxtraces=10, norm=True, xlim=None, ylim=None, scalfact=1.,
                  cosfilt=(0.01, 0.02, 20, 30), water_level=60, output='VEL', textline=['>', '>', '>', '>', '>'],
-                 menu=None, quickdraw=True, processing=None):
+                 menu=None, quickdraw=True, processing=None, taper=0.05):
         """
         Initializes the class with starting values
         (st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=True, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None)
@@ -980,9 +1055,10 @@ class InteractivePlot:
         self.processing_print = processing
         self.env = False  # whether plot is an envelope or not
         self.quickdraw = quickdraw
-        self.taper = 0.05
-        if 60/(self.st[0].stats.endtime-self.st[0].stats.starttime) > 0.05:
-            self.taper = 60./(self.st[0].stats.endtime-self.st[0].stats.starttime)  # Taper on first minute if the signal length is really long
+        self.taper = taper
+        if taper is not None:
+            if 60/(self.st[0].stats.endtime-self.st[0].stats.starttime) > 0.05:
+                self.taper = 60./(self.st[0].stats.endtime-self.st[0].stats.starttime)  # Taper on first minute if the signal length is really long
         self.menu = """
         up - double scaling
         down - half scaling
@@ -1083,7 +1159,8 @@ class InteractivePlot:
                     self.print1.append('> Filtering current data between %1.2f and %1.2f Hz' % (self.input1, self.input2))
                     self.number = ''
                     self.st_current.detrend('linear')
-                    self.st_current.taper(max_percentage=self.taper, type='cosine')
+                    if self.taper is not None:
+                        self.st_current.taper(max_percentage=self.taper, type='cosine')
                     self.st_current.filter('bandpass', freqmin=self.input1, freqmax=self.input2,
                                            corners=2, zerophase=False)
                     redraw = True
@@ -1314,7 +1391,8 @@ class InteractivePlot:
             try:
                 self.st_current = self.st.copy()
                 self.st_current.detrend('linear')
-                self.st_current.taper(max_percentage=self.taper, type='cosine')
+                if self.taper is not None:
+                    self.st_current.taper(max_percentage=self.taper, type='cosine')
                 try:
                     self.st_current.remove_response(output=self.output, pre_filt=self.cosfilt,
                                                     water_level=self.water_level)
@@ -1322,7 +1400,8 @@ class InteractivePlot:
                     print('Failed to do bulk station correction, trying one at a time')
                     self.st_current = self.st.copy()  # Start with fresh data
                     self.st_current.detrend('linear')
-                    self.st_current.taper(max_percentage=self.taper, type='cosine')
+                    if self.taper is not None:
+                        self.st_current.taper(max_percentage=self.taper, type='cosine')
                     removeid = []
                     for trace in self.st_current:
                         try:

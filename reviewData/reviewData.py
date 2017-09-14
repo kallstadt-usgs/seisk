@@ -512,7 +512,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
 def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10,
            textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, labelquickdraw=True,
            processing=None, figsize=None, colors=None, labelsize=12., addscale=False, unitlabel=None, convert=1.,
-           scaleperc=0.9):
+           scaleperc=0.9, vlines=None, vlinestyle='--', vlinecolor='k'):
     """
     Plot record section of data from an obspy stream
     USAGE
@@ -539,6 +539,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     unitlabel = Label for scale bar
     convert = Factor to multipy by to convert data amplitudes into unitlabel units (e.g. to convert m/s to mm/s, convert=10**3)
     scalebarperc = percent of total axis width over from left edge of plot to place scale bar
+    vlines = None, or array of UTCDateTimes where vertical lines should be placed (e.g. to show event start times)
 
     OUTPUTS
     fig = handle of figure
@@ -738,6 +739,10 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
         axbox.set_xticks([])
         axbox.text(0.01, 0.99, '\n'.join(textline[-5:]), transform=axbox.transAxes, fontsize=12, verticalalignment='top')
 
+    if vlines is not None:
+        for vlin in vlines:
+            ax.axvline(vlin - st[0].stats.starttime, linestyle=vlinestyle, color=vlinecolor)
+
     props1 = dict(facecolor='white', alpha=1)
     if labelquickdraw:
         if quickdraw is True and flag == 1:
@@ -755,7 +760,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
 
 
 def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, recsec=False, labelsize=12,
-                    logx=False, logy=False, xunits='Hz', xlim=None, ylim=None, yunits=None, colors1=None):
+                    logx=False, logy=False, xunits='Hz', xlim=None, ylim=None, yunits=None, colors1=None, render=True):
     """
     Plot multitaper spectra of signals in st, equivalent to power spectral density
 
@@ -813,11 +818,16 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
             else:
                 linestyle = ':'
 
-            if ind == np.round(lent/2.):
+            if ind == np.round(lent/2.) and lent != 2:
                 if yunits is not None:
                     ax.set_ylabel('Power spectral density (%s)' % yunits)
                 else:
                     ax.set_ylabel('Power spectral density')
+            elif ind == np.round(lent/2.) and lent == 2:
+                if yunits is not None:
+                    fig.text(0.04, 0.5, 'Power spectral density (%s)' % yunits, ha='center')
+                else:
+                    fig.text(0.04, 0.5, 'Power spectral density', ha='center')
             if xunits == 'Hz':
                 ax.plot(freq, amp, label=st[i].id, color=color, linestyle=linestyle)
                 xun = 'Frequency (Hz)'
@@ -847,6 +857,9 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
         ax.tick_params(labelsize=labelsize)
+        max_yticks = 4
+        yloc = plt.LogLocator(numticks=max_yticks)
+        ax.yaxis.set_major_locator(yloc)
         if i == 0:
             mcs = ('%.2f' % (st[0].stats.starttime.microsecond/10.**6)).replace('0.', '')
             timeprint1 = st[0].stats.starttime.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
@@ -859,14 +872,19 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
         plt.subplots_adjust(hspace=0.)  # reduce vertical space between plots
         plt.setp([a.get_xticklabels() for a in fig.axes[:-1]], visible=False)  # Turn of x labels where not needed
 
-    plt.show()
+    plt.xlabel(xun)
 
-    return freqs, amps
+    if render:
+        plt.show(fig)
+    else:
+        plt.close(fig)
+
+    return freqs, amps, fig
 
 
 def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, wlen=None, norm=True,
                      overperc=0.85, log1=True, maxPower=None, minPower=None, freqmax=None,
-                     colorb=False, labelsize=12, figsize=None):
+                     colorb=False, labelsize=12, figsize=None, render=True):
     """
     Plot spectrogram (opens new figure)
     USAGE
@@ -970,9 +988,12 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
         cbar_ax = fig.add_axes([0.85, 0.15, 0.03, 0.7])
         fig.colorbar(im, cax=cbar_ax)
 
-    plt.show()
+    if render:
+        plt.show(fig)
+    else:
+        plt.close(fig)
     #plt.tight_layout()
-    return fig, axes
+    return fig
 
 
 class InteractivePlot:
@@ -1059,6 +1080,9 @@ class InteractivePlot:
         if taper is not None:
             if 60/(self.st[0].stats.endtime-self.st[0].stats.starttime) > 0.05:
                 self.taper = 60./(self.st[0].stats.endtime-self.st[0].stats.starttime)  # Taper on first minute if the signal length is really long
+            self.dotaper = True
+        else:
+            self.dotaper = False
         self.menu = """
         up - double scaling
         down - half scaling
@@ -1390,23 +1414,17 @@ class InteractivePlot:
         if event.key.upper() == 'C':  # do station correction and replot
             try:
                 self.st_current = self.st.copy()
-                self.st_current.detrend('demean')
-                if self.taper is not None:
-                    self.st_current.taper(max_percentage=self.taper, type='cosine')
                 try:
                     self.st_current.remove_response(output=self.output, pre_filt=self.cosfilt,
-                                                    water_level=self.water_level)
+                                                    water_level=self.water_level, taper=self.dotaper, taper_fraction=self.taper)
                 except:
                     print('Failed to do bulk station correction, trying one at a time')
                     self.st_current = self.st.copy()  # Start with fresh data
-                    self.st_current.detrend('demean')
-                    if self.taper is not None:
-                        self.st_current.taper(max_percentage=self.taper, type='cosine')
                     removeid = []
                     for trace in self.st_current:
                         try:
                             trace.remove_response(output=self.output, pre_filt=self.cosfilt,
-                                                  water_level=self.water_level)
+                                                  water_level=self.water_level, taper=self.dotaper, taper_fraction=self.taper)
                         except:
                             print 'Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)
                             removeid.append(trace.id)

@@ -825,9 +825,9 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
                     ax.set_ylabel('Power spectral density')
             elif ind == np.round(lent/2.) and lent == 2:
                 if yunits is not None:
-                    fig.text(0.04, 0.5, 'Power spectral density (%s)' % yunits, ha='center')
+                    fig.text(0.04, 0.5, 'Power spectral density (%s)' % yunits, ha='center', rotation=90)
                 else:
-                    fig.text(0.04, 0.5, 'Power spectral density', ha='center')
+                    fig.text(0.04, 0.5, 'Power spectral density', ha='center', rotation=90)
             if xunits == 'Hz':
                 ax.plot(freq, amp, label=st[i].id, color=color, linestyle=linestyle)
                 xun = 'Frequency (Hz)'
@@ -921,7 +921,7 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
     if norm:
         title1 = title1 + ' - normalized to maxes'
     else:
-        title1 = title1 + ' - same amplitudes'
+        title1 = title1 + ' - same amplitude scaling'
 
     for i, st1 in enumerate(st[indfirst:indfirst+maxtraces]):
         if wlen is None:

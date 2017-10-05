@@ -567,7 +567,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
             axbox = fig.add_axes([0.2, 0.05, 0.75, 0.1])
             ax = fig.add_axes([0.2, 0.2, 0.75, 0.75])  # left bottom width height
         else:
-            ax = fig.add_axes([0.2, 0.1, 0.75, 0.8])
+            ax = fig.add_axes([0.23, 0.1, 0.72, 0.8])
     elif update is True:
         try:
             fig = fighandle
@@ -789,6 +789,8 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
         stas = unique_list([trace.stats.station for trace in st])
         lent = len(stas)
         fig, axes = plt.subplots(lent, sharex=True, sharey=False, figsize=(10, min(10, 2*lent)))
+        if lent == 1:
+            axes = [axes]
     else:
         fig, ax = plt.subplots(1, figsize=(8, 5))
 
@@ -817,17 +819,6 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
                 linestyle = '--'
             else:
                 linestyle = ':'
-
-            if ind == np.round(lent/2.) and lent != 2:
-                if yunits is not None:
-                    ax.set_ylabel('Power spectral density (%s)' % yunits)
-                else:
-                    ax.set_ylabel('Power spectral density')
-            elif ind == np.round(lent/2.) and lent == 2:
-                if yunits is not None:
-                    fig.text(0.04, 0.5, 'Power spectral density (%s)' % yunits, ha='center', rotation=90)
-                else:
-                    fig.text(0.04, 0.5, 'Power spectral density', ha='center', rotation=90)
             if xunits == 'Hz':
                 ax.plot(freq, amp, label=st[i].id, color=color, linestyle=linestyle)
                 xun = 'Frequency (Hz)'
@@ -872,6 +863,11 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
         plt.subplots_adjust(hspace=0.)  # reduce vertical space between plots
         plt.setp([a.get_xticklabels() for a in fig.axes[:-1]], visible=False)  # Turn of x labels where not needed
 
+        if yunits is not None:
+            fig.text(0.04, 0.5, 'Power spectral density (%s)' % yunits, va='center', rotation=90)
+        else:
+            fig.text(0.04, 0.5, 'Power spectral density', va='center', rotation=90)
+
     plt.xlabel(xun)
 
     if render:
@@ -915,6 +911,8 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
         figsize = (12, min(15, 2*maxtraces))
     maxtraces = min(len(st), maxtraces)
     fig, axes = plt.subplots(maxtraces, sharex=True, sharey=False, figsize=figsize)
+    if maxtraces == 1:
+        axes = [axes]
     mcs = ('%.2f' % (st[0].stats.starttime.microsecond/10.**6)).replace('0.', '')
     timeprint = st[0].stats.starttime.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
     title1 = 'Start time: %s (UTC)' % timeprint

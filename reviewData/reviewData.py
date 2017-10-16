@@ -908,9 +908,11 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
     if view window is longer than a certain number of seconds, change to minutes or hours
     """
     if figsize is None:
-        figsize = (12, min(15, 2*maxtraces))
+        figsize = (12, min(18, 2*maxtraces))
+
     maxtraces = min(len(st), maxtraces)
     fig, axes = plt.subplots(maxtraces, sharex=True, sharey=False, figsize=figsize)
+
     if maxtraces == 1:
         axes = [axes]
     mcs = ('%.2f' % (st[0].stats.starttime.microsecond/10.**6)).replace('0.', '')
@@ -976,8 +978,9 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
             axes[i].set_ylim(ylims)
         else:
             axes[i].set_ylim([0, freqmax])
-        axes[i].set_ylabel(st1.stats.station + '.' + st1.stats.channel, fontsize=labelsize)
-    plt.subplots_adjust(hspace=0.3)  # reduce vertical space between plots
+        axes[i].set_ylabel(st1.stats.station+'.'+st1.stats.channel+'.'+st1.stats.location+'.'+st1.stats.network, fontsize=labelsize, rotation=0)
+        axes[i].yaxis.set_label_coords(-0.15, 0.5)
+    plt.subplots_adjust(hspace=0.1, left=0.23)  # reduce vertical space between plots
     plt.setp([a.get_xticklabels() for a in fig.axes[:-1]], visible=False)
     axes[-1].tick_params(axis='both', which='major')
     plt.xlabel('Time (sec)', fontsize=labelsize)

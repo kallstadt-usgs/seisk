@@ -280,7 +280,7 @@ def multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False):
     return freqs, amps
 
 
-def multitaperSN(st, stnoise, SNrat=1.5, number_of_tapers=None, time_bandwidth=4., sine=False):
+def multitaperSN(st, stnoise, SNrat=1.5, time_bandwidth=4.):
     """
     Return masked arrays of multitaper, masking where SNratio is greater than SNrat
 
@@ -291,25 +291,29 @@ def multitaperSN(st, stnoise, SNrat=1.5, number_of_tapers=None, time_bandwidth=4
      This is maximum senseful amount. More tapers will have no great influence on the final spectrum but increase the
      calculation time. Use fewer tapers for a faster calculation.
     :param time_bandwidth_div: Smoothing amount, should be between 1 and Nsamps/2.
-    :param sine: if True, will use sine_psd instead of multitaper, sine method should be used for sharp cutoffs or
-     deep valleys, or small sample sizes
     """
-    from mtspec import mtspec, sine_psd
+    from mtspec import mtspec
 
     st = Stream(st)  # turn into a stream object in case st is a trace
+    stnoise = Stream(stnoise)
 
     amps = []
     freqs = []
+    ampmask = []
     for i, st1 in enumerate(st):
-        if sine is False:
-            nfft = int(nextpow2((st1.stats.endtime - st1.stats.starttime) * st1.stats.sampling_rate))
-            amp, freq = mtspec(st1.data, 1./st1.stats.sampling_rate, time_bandwidth=time_bandwidth,
-                               number_of_tapers=number_of_tapers, nfft=nfft)
-        else:
-            st1.taper(max_percentage=0.05, type='cosine')
-            amp, freq = sine_psd(st1.data, 1./st1.stats.sampling_rate)
+        #if st1.stats.sampling_rate != stnoise[i].stats.sampling_rate:
+        #    print 'Signal and noise sample rates are different. Abort!'
+        #    return
+        dat = st1.data
+        pdat = stnoise[i].data
+        # Find max nfft of the two and use that for both so they line up
+        maxnfft = int(np.max((nextpow2(len(dat)), nextpow2(len(pdat)))))
+        amp, freq = mtspec(dat, 1./st1.stats.sampling_rate, time_bandwidth=time_bandwidth, nfft=maxnfft)
+        pamp, pfreq = mtspec(pdat, 1./st1.stats.sampling_rate, time_bandwidth=time_bandwidth, nfft=maxnfft)
+        idx = (amp/pamp < SNrat)  # good values
         amps.append(amp)
         freqs.append(freq)
+        ampmask.append(ma.array(amp, mask=idx))
     return freqs, amps, ampmask
 
 

@@ -925,7 +925,7 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
 
     for i, st1 in enumerate(st[indfirst:indfirst+maxtraces]):
         if wlen is None:
-            wlen = st1.stats.sampling_rate/25.
+            wlen = np.min([(st1.stats.endtime - st1.stats.starttime)/50., st1.stats.sampling_rate/25.])
         NFFT = int(nextpow2(wlen*st1.stats.sampling_rate))
         noverlap = int(overperc*NFFT)
         Pxx, freq, time = mlab.specgram(st1.data, NFFT=NFFT, Fs=st1.stats.sampling_rate,

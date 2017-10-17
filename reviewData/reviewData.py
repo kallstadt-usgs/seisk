@@ -788,7 +788,7 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
     if recsec:
         stas = unique_list([trace.stats.station for trace in st])
         lent = len(stas)
-        fig, axes = plt.subplots(lent, sharex=True, sharey=False, figsize=(10, min(10, 2*lent)))
+        fig, axes = plt.subplots(lent, sharex=True, sharey=False, figsize=(10, min(10, 2*(lent+1))))
         if lent == 1:
             axes = [axes]
     else:
@@ -869,6 +869,7 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
             fig.text(0.04, 0.5, 'Power spectral density', va='center', rotation=90)
 
     plt.xlabel(xun)
+    plt.subplots_adjust(bottom=0.15)
 
     if render:
         plt.show(fig)

@@ -7,7 +7,7 @@ from matplotlib import mlab
 import matplotlib.pyplot as plt
 from obspy.clients.fdsn import Client as FDSN_Client
 from obspy.clients.earthworm import Client as ew_client
-from obspy.signal.invsim import seisSim, cornFreq2Paz
+from obspy.signal.invsim import simulate_seismometer, corn_freq_2_paz
 from obspy import UTCDateTime
 import numpy as np
 import obspy.signal.filter as filte
@@ -27,7 +27,7 @@ Written by kallstadt@usgs.gov
 
 def getdata(network, station, location, channel, t1, t2, attach_response=True,
             savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
-            loadfromfile=False, reloadfile=False, detrend='demean', merge=True, fill_value=0.):
+            loadfromfile=False, reloadfile=False, detrend='demean', merge=True, pad=True, fill_value=0.):
     """
     Get data from IRIS (or NCEDC) if it exists, save it
     USAGE
@@ -51,6 +51,7 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
     reloadfile - if True, will reload locally saved file without asking first
     detrend - method to use for detrending all traces (before merging), if None, no detrending will be applied
     merge - if True, will try to merge all traces and will fill with fill_value
+    pad - if True, will pad all to be the same length
     fill_value - fill value for any gaps while merging
 
 
@@ -84,33 +85,36 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
             # if any have integer data, turn into float
             for tr in st:
                 tr.data = tr.data.astype(float)
+            #if detrend is not None:
+            #    st.detrend(detrend)
+            if merge:
+                try:
+                    st.merge(fill_value=fill_value)
+                except:
+                    print 'bulk merge failed, trying station by station'
+                    st_new = Stream()
+                    stationlist = unique_list([trace.stats.station for trace in st])
+                    for sta in stationlist:
+                        temp = st.select(station=sta)
+                        try:
+                            temp.merge(fill_value=fill_value)
+                            st_new += temp
+                        except:
+                            # Try resampling
+                            sr = [tr.stats.sampling_rate for tr in temp]
+                            news = mode(sr)[0][0]
+                            temp.resample(news)
+                            temp.merge(fill_value=fill_value)
+                            st_new += temp
+                        #finally:
+                        #    print('%s would not merge - deleting it') % (sta,)
+                    st = st_new
             if detrend is not None:
                 st.detrend(detrend)
-            try:
-                st.merge(fill_value=fill_value)
-            except:
-                print 'bulk merge failed, trying station by station'
-                st_new = Stream()
-                stationlist = unique_list([trace.stats.station for trace in st])
-                for sta in stationlist:
-                    temp = st.select(station=sta)
-                    try:
-                        temp.merge(fill_value=fill_value)
-                        st_new += temp
-                    except:
-                        # Try resampling
-                        sr = [tr.stats.sampling_rate for tr in temp]
-                        news = mode(sr)[0][0]
-                        temp.resample(news)
-                        temp.merge(fill_value=fill_value)
-                        st_new += temp
-                    #finally:
-                    #    print('%s would not merge - deleting it') % (sta,)
-                st = st_new
-            st.detrend('demean')
             #find min start time
             mint = min([trace.stats.starttime for trace in st])
-            st.trim(starttime=mint, pad=True, fill_value=0)
+            if pad:
+                st.trim(starttime=mint, pad=True, fill_value=fill_value)
         except Exception as e:
             print e
             return
@@ -135,7 +139,7 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
 
 def getdata_exact(stations, t1, t2, attach_response=True,
                   savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
-                  loadfromfile=False, reloadfile=False, detrend='demean', merge=True, fill_value=0.):
+                  loadfromfile=False, reloadfile=False, detrend='demean', merge=True, pad=True, fill_value=0.):
     """
     Same as getdata, but only gets exact station channel combos specified instead of grabbing all (takes longer)
     Get data from IRIS (or NCEDC) if it exists, save it
@@ -195,15 +199,39 @@ def getdata_exact(stations, t1, t2, attach_response=True,
                     if detrend is not None:
                         sttemp.detrend(detrend)
                     if merge:
-                        sttemp.merge(fill_value=fill_value)
+                        try:
+                            sttemp.merge(fill_value=fill_value)
+                        except:
+                            print 'bulk merge failed, trying station by station'
+                            st_new = Stream()
+                            stationlist = unique_list([trace.stats.station for trace in sttemp])
+                            for sta in stationlist:
+                                temp = sttemp.select(station=sta)
+                                try:
+                                    temp.merge(fill_value=fill_value)
+                                    st_new += temp
+                                except:
+                                    # Try resampling
+                                    sr = [tr.stats.sampling_rate for tr in temp]
+                                    news = mode(sr)[0][0]
+                                    temp.resample(news)
+                                    temp.merge(fill_value=fill_value)
+                                    st_new += temp
+                                #finally:
+                                #    print('%s would not merge - deleting it') % (sta,)
+                            sttemp = st_new
+                    if detrend is not None:
+                        sttemp.detrend(detrend)
                     st += sttemp.copy()
                 except Exception as e:
                     print e
                     print('failed to grab data from %s, moving on') % (statup,)
-            st.detrend('demean')
+            if detrend is not None:
+                st.detrend('demean')
             #find min start time
             mint = min([trace.stats.starttime for trace in st])
-            st.trim(starttime=mint, pad=True, fill_value=0)
+            if pad:
+                st.trim(starttime=mint, pad=True, fill_value=fill_value)
         except Exception as e:
             print e
             return
@@ -216,7 +244,7 @@ def getdata_exact(stations, t1, t2, attach_response=True,
 
 def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_response=True,
                     savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False,
-                    detrend='demean', merge=True, fill_value=0.):
+                    detrend='demean', merge=True, pad=True, fill_value=0.):
     """
     Get data from winston waveserver
     USAGE
@@ -288,7 +316,8 @@ def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_respo
         if 'st' in locals():
             if len(st) != 0:  # make sure st isn't empty
                 mint = min([trace.stats.starttime for trace in st])
-                st.trim(starttime=mint, pad=True, fill_value=0)
+                if pad:
+                    st.trim(starttime=mint, pad=True, fill_value=fill_value)
                 if attach_response is True:
                     client = FDSN_Client('IRIS')  # try to get responses from IRIS and attach them
                     try:
@@ -307,7 +336,7 @@ def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_respo
 
 def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_response=False, savedat=False,
                 folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False, detrend='demean',
-                merge=True, fill_value=0.):
+                merge=True, pad=True, fill_value=0.):
     """
     Read in sac or mseed files
     USAGE
@@ -399,10 +428,12 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
                         print('%s would not merge - deleting it') % (sta,)
                 st = st_new
         if starttime or endtime:
-            st.trim(starttime=starttime, endtime=endtime, pad=True, fill_value=0)
+            if pad:
+                st.trim(starttime=starttime, endtime=endtime, pad=True, fill_value=fill_value)
         else:  # find min start time and trim all to same point
             mint = min([trace.stats.starttime for trace in st])
-            st.trim(starttime=mint)  # ,pad = True, fill_value = 0)
+            if pad:
+                st.trim(starttime=mint)  # ,pad = True, fill_value = 0)
         if savedat:  # save file if so choose
             st.write(folderdat+'/'+filename, format='PICKLE')
     return st
@@ -411,7 +442,7 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
 def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiuskm=0., maxradiuskm=20., channels='*',
                location='*', source='IRIS', attach_response=True, savedat=False, folderdat='data', filenamepref='Data_',
                loadfromfile=False, reloadfile=False, detrend=None,
-               merge=False, fill_value=0.):
+               merge=False, pad=True, fill_value=0.):
     """
     Automatically pull existing data within a certain distance of the epicenter (or any lat/lon coordinates) and attach station coordinates to data
     USAGE
@@ -512,7 +543,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiu
 def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10,
            textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, labelquickdraw=True,
            processing=None, figsize=None, colors=None, labelsize=12., addscale=False, unitlabel=None, convert=1.,
-           scaleperc=0.9, vlines=None, vlinestyle='--', vlinecolor='k'):
+           scaleperc=0.9, vlines=None, vlinestyle='--', vlinecolor='k', pad=False, fill_value=0.):
     """
     Plot record section of data from an obspy stream
     USAGE
@@ -540,10 +571,14 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     convert = Factor to multipy by to convert data amplitudes into unitlabel units (e.g. to convert m/s to mm/s, convert=10**3)
     scalebarperc = percent of total axis width over from left edge of plot to place scale bar
     vlines = None, or array of UTCDateTimes where vertical lines should be placed (e.g. to show event start times)
+    pad = whether to pad traces so they are all the same length
+    fill_value = fill value to pad with, if None, will create masked array, which may present challenges to further processing the data
 
     OUTPUTS
     fig = handle of figure
     """
+    # Make sure not to modify the original
+    st = st.copy()
     try:
         maxtraces = min(len(st), maxtraces)
         maxtraces = int(maxtraces)
@@ -587,14 +622,19 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     miny = 0
     fig.stationsy = {}  # create empty dictionary to save which station is at which y-value
 
+    # Pad traces so they have same start and end times
+    tmin = min([trace.stats.starttime for trace in st])
+    tmax = max([trace.stats.endtime for trace in st])
+    if pad:
+        st = st.trim(tmin, tmax, pad=True, fill_value=fill_value)
+
     if xlim is None:
-        xlim = (0, len(st[0].data)/st[0].stats.sampling_rate)
+        xlim = [0, tmax-tmin]
+
     avgmax = np.median(np.absolute(st.max()))  # parameter used for scaling traces relative to each other
     i = 0
     missing = 0
 
-    #find minimum tvec starting time and set that as 0 point
-    tmin = min([trace.stats.starttime for trace in st])
     flag = 0
     for st1, color1 in zip(st[indfirst:indfirst+maxtraces], rep[indfirst:indfirst+maxtraces]):
         dat = st1.data
@@ -760,7 +800,8 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
 
 
 def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, recsec=False, labelsize=12,
-                    logx=False, logy=False, xunits='Hz', xlim=None, ylim=None, yunits=None, colors1=None, render=True):
+                    logx=False, logy=False, xunits='Hz', xlim=None, ylim=None, yunits=None, colors1=None, render=True,
+                    detrend='demean'):
     """
     Plot multitaper spectra of signals in st, equivalent to power spectral density
 
@@ -783,7 +824,8 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
     """
     import random
     st = Stream(st)  # in case it's a trace
-    st.detrend('demean')
+    if detrend is not None:
+        st.detrend(detrend)
 
     if recsec:
         stas = unique_list([trace.stats.station for trace in st])
@@ -2011,11 +2053,11 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
             for T in periods:
                 freq = 1.0/T
                 omega = (2 * 3.14159 * freq) ** 2
-                paz_sa = cornFreq2Paz(freq, damp=damping)
+                paz_sa = corn_freq_2_paz(freq, damp=damping)
                 paz_sa['sensitivity'] = omega
                 paz_sa['zeros'] = []
-                dd = seisSim(trace.data, trace.stats.sampling_rate, paz_remove=None, paz_simulate=paz_sa,
-                             taper=True, simulate_sensitivity=True, taper_fraction=0.05)
+                dd = simulate_seismometer(trace.data, trace.stats.sampling_rate, paz_remove=None, paz_simulate=paz_sa,
+                                          taper=True, simulate_sensitivity=True, taper_fraction=0.05)
                 if abs(max(dd)) >= abs(min(dd)):
                     psa1 = abs(max(dd))
                 else:

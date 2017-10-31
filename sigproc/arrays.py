@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sigproc
 from obspy.signal.array_analysis import array_transff_freqslowness, array_transff_wavenumber, array_processing, get_geometry, get_timeshift, get_spoint
-from obspy.signal.util import utlGeoKm, next_pow_2
+from obspy.signal.util import util_geo_km, next_pow_2
 from obspy import UTCDateTime, Stream
 from obspy.signal.headers import clibsignal
 import math
@@ -142,14 +142,14 @@ def plotarray(stcoord, inunits='m', plotunits='km', sourcecoords=None, stalabels
         lons = np.array([coord[0] for coord in tempcoords])
         lats = np.array([coord[1] for coord in tempcoords])
         for coord in tempcoords:
-            x, y = utlGeoKm(lons.min(), lats.min(), coord[0], coord[1])
+            x, y = util_geo_km(lons.min(), lats.min(), coord[0], coord[1])
             coords.append(np.array([x, y, coord[2]]))
         if plotunits == 'm':
             coords = np.array(coords)*1000.
         else:
             coords = np.array(coords)
         if sourcecoords is not None:
-            sx, sy = utlGeoKm(lons.min(), lats.min(), sourcecoords[0], sourcecoords[1])
+            sx, sy = util_geo_km(lons.min(), lats.min(), sourcecoords[0], sourcecoords[1])
 
     elif inunits == 'm' and plotunits == 'km':
         coords = np.array(tempcoords)/1000.

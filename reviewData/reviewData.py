@@ -749,9 +749,9 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
             fig = plt.figure(figsize=figsize)
         if textbox is True:
             axbox = fig.add_axes([0.2, 0.05, 0.75, 0.1])
-            ax = fig.add_axes([0.2, 0.2, 0.75, 0.75])  # left bottom width height
+            ax = fig.add_axes([0.2, 0.23, 0.75, 0.72])  # left bottom width height
         else:
-            ax = fig.add_axes([0.23, 0.1, 0.72, 0.8])
+            ax = fig.add_axes([0.23, 0.13, 0.72, 0.78])
 
     if labellist is None:
         labels = []
@@ -885,24 +885,9 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
         print 'nothing to see over here, go back'
     plt.tick_params(left='off', right='off')
     plt.tick_params(axis='both', which='major', labelsize=12)
-    if tscale == 'relative':
-        plt.xlabel('Time (sec)', fontsize=12)
-    else:
-        # Change yaxis labels to absolute time
-        seclabels = ax.get_xticks()
-        newlabs = []
-        for sec in seclabels:
-            value1 = tmin + sec
-            if tmax-tmin > 3600.*24.:# greater than a day, include day but not second
-                newlabs.append(value1.strftime('%d %b-%H:%M'))
-            elif tmax-tmin > 3600.: # greater than an hour, show full seconds
-                newlabs.append(value1.strftime('%d %b-%H:%M:%S'))
-            else:
-                mcs = ('%.2f' % (value1.microsecond/10.**6)).replace('0.', '')
-                newlabs.append(value1.strftime('%H:%M:%S.') + mcs)
 
-        ax.set_xticklabels(newlabs, fontsize=labelsize, rotation=20)
     plt.autoscale(enable=True, axis='y', tight=True)
+
     plt.yticks(yticks1)
     if labelloc == 'below':
         ax.set_yticklabels(labels, fontsize=labelsize, position=(0, 0), ha='left', va='top')
@@ -917,8 +902,9 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
         ax.set_ylim(miny, maxy)
     if grid:
         plt.grid('on')
-    mcs = ('%.2f' % (st[0].stats.starttime.microsecond/10.**6)).replace('0.', '')
-    timeprint = st[0].stats.starttime.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
+
+    mcs = ('%.2f' % (tmin.microsecond/10.**6)).replace('0.', '')
+    timeprint = tmin.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
 
     if samezero:
         sttm = ''
@@ -967,7 +953,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
 
     if vlines is not None:
         for vlin in vlines:
-            ax.axvline(vlin - st[0].stats.starttime, linestyle=vlinestyle, color=vlinecolor)
+            ax.axvline(vlin - tmin, linestyle=vlinestyle, color=vlinecolor)
 
     props1 = dict(facecolor='white', alpha=1)
     if labelquickdraw:
@@ -975,6 +961,26 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
             ax.annotate('qd on ', xy=(0.9, 0.95), xycoords='axes fraction', bbox=props1)
         elif quickdraw is True and flag == 0:
             ax.annotate('qd off', xy=(0.9, 0.95), xycoords='axes fraction', bbox=props1)
+
+    if tscale == 'relative':
+        plt.xlabel('Time (sec)', fontsize=12)
+    else:
+        # Change yaxis labels to absolute time
+        seclabels = ax.get_xticks()
+        newlabs = []
+        for sec in seclabels:
+            value1 = tmin + sec
+            if tmax-tmin > 3600.*24.:# greater than a day, include day but not second
+                newlabs.append(value1.strftime('%d %b-%H:%M'))
+                rotation = 5
+            elif tmax-tmin > 3600.: # greater than an hour, show full seconds
+                newlabs.append(value1.strftime('%d %b-%H:%M:%S'))
+                rotation = 8
+            else:
+                mcs = ('%.2f' % (value1.microsecond/10.**6)).replace('0.', '')
+                newlabs.append(value1.strftime('%H:%M:%S.') + mcs)
+                rotation = 0
+        ax.set_xticklabels(newlabs, fontsize=labelsize, ha="center", rotation=rotation) #, rotation=20)
 
     if update is False:
         plt.show()
@@ -1187,6 +1193,8 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
             minP = maxP/1e6
             vmin = minP
             vmax = maxP
+            
+        print('Max power: %1.2e, Min power: %1.2e\n' % (maxP, minP))
 
         if log1 is True and minP is not None and maxP is not None:
             vmin = np.log10(minP)
@@ -1250,6 +1258,7 @@ class InteractivePlot:
     processing = if None, won't show the processing that has been applied to the data, otherwise will show whatever is entered for processing
     taper = taper to apply before filtering, if None, no tapering will be applied (default 0.05, 5% taper)
     specg = dictionary of inputs for make_spectrogram
+    vlines = locations of vertical lines
 
     OUTPUTS - everything that is stored in self (called zp in above example) can be accessed after exiting, here are a few of the most useful ones
     zp.st_current = processed data in time window that was used
@@ -1274,14 +1283,15 @@ class InteractivePlot:
 
     """
 
-    def __init__(self, st, fig=None, indfirst=0, maxtraces=10, norm=True, xlim=None, ylim=None, scalfact=1.,
-                 cosfilt=(0.01, 0.02, 20, 30), water_level=60, output='VEL', textline=['>', '>', '>', '>', '>'],
+    def __init__(self, st, fig=None, indfirst=0, maxtraces=10, norm=True,
+                 xlim=None, ylim=None, scalfact=1.,cosfilt=(0.01, 0.02, 20, 30),
+                 water_level=60, output='VEL', textline=['>', '>', '>', '>', '>'],
                  menu=None, quickdraw=True, processing=None, taper=None,
+                 tscale='relative', vlines=None,
                  specg = {'detrend': mlab.detrend_linear, 'wlen': None, 'norm': True, 'overperc': 0.85, 'log1': True,
                           'maxPower': None, 'minPower': None, 'freqmax': None}):
         """
         Initializes the class with starting values
-        (st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=True, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None)
         """
         self.ind = 0  # index for current zoom position
         self.zflag = 0  # index used for zooming
@@ -1313,15 +1323,19 @@ class InteractivePlot:
         self.indfirst = indfirst
         self.maxtraces = maxtraces
         self.tmin = min([trace.stats.starttime for trace in st])
+        self.tmax = max([trace.stats.starttime for trace in st])
         self.print1 = textline
         self.menu_print = menu
         self.processing_print = processing
         self.env = False  # whether plot is an envelope or not
         self.quickdraw = quickdraw
         self.taper = taper
+        self.tscale = tscale
+        self.specg = specg
+        self.vlines = vlines
         if taper is not None:
-            if 60/(self.st[0].stats.endtime-self.st[0].stats.starttime) > 0.05:
-                self.taper = 60./(self.st[0].stats.endtime-self.st[0].stats.starttime)  # Taper on first minute if the signal length is really long
+            if 60/(self.tmax-self.tmin) > 0.05:
+                self.taper = 60./(self.tmax-self.tmin)  # Taper on first minute if the signal length is really long
             self.dotaper = True
         else:
             self.dotaper = False
@@ -1364,11 +1378,12 @@ class InteractivePlot:
         if fig is None:
             self.fig = recsec(self.st_current, xlim=xlim,
                               ylim=ylim, scalfact=self.scalfact,
-                              update=False, fighandle=[],
+                              update=False, fighandle=[], tscale=self.tscale,
                               norm=self.normflag, indfirst=self.indfirst,
                               maxtraces=self.maxtraces, textline=self.print1,
                               menu=self.menu_print, processing=self.processing_print,
-                              textbox=True, quickdraw=self.quickdraw)
+                              textbox=True, quickdraw=self.quickdraw,
+                              vlines=self.vlines)
         else:
             self.fig = fig
         self.axbox = self.fig.get_axes()[0]
@@ -1501,10 +1516,10 @@ class InteractivePlot:
                                   ylim=ylims, scalfact=self.scalfact,
                                   update=False, fighandle=[],
                                   norm=self.normflag, indfirst=self.indfirst,
-                                  maxtraces=self.maxtraces,
+                                  maxtraces=self.maxtraces, tscale=self.tscale,
                                   menu=None, processing=None,
                                   quickdraw=False, textbox=False,
-                                  figsize=figsize)
+                                  figsize=figsize, vlines=self.vlines)
                 figprint.savefig(self.number+'.png', format='png')
                 plt.close(figprint)
                 print('figure %s saved' % self.number)
@@ -1711,15 +1726,23 @@ class InteractivePlot:
             self.print1.append('> '+temp)
 
         if event.key.upper() == 'G':  # make spectrogram of current window - open in new fig
-            print 'later will add some options to set Hz width and so on'
+            print 'Generating spectrogram of current window'
             xlimtemp = self.ax.get_xlim()
             st_temp = self.st.copy()
             st_temp = st_temp.slice(self.tmin + xlimtemp[0], self.tmin + xlimtemp[1])
             st_temp = st_temp[self.indfirst:self.indfirst+self.maxtraces+1]
-            make_spectrogram(st_temp, detrend=mlab.detrend_linear, maxtraces=len(st_temp),
-                             wlen=((st_temp[0].stats.endtime-st_temp[0].stats.starttime)/150.),
-                             overperc=0.9, log1=True, maxPower=100000, minPower=100,
-                             freqmax=st_temp[0].stats.sampling_rate/2., colorb=True)
+            if self.specg['detrend'] is None:
+                self.specg['detrend'] = mlab.detrend_linear
+            if self.specg['freqmax'] is None:
+                self.specg['freqmax'] = st_temp[0].stats.sampling_rate/2.
+#            if self.specg['minpower'] is None:
+#                self.specg['minpower'] = 10 
+#            if self.specg['maxpower'] is None:
+#                self.specg['maxpower'] = 1000000
+#            if self.specg['wlen'] is None:
+                self.specg['wlen'] = ((st_temp[0].stats.endtime-st_temp[0].stats.starttime)/150.)
+
+            make_spectrogram(st_temp, colorb=True, maxtraces=len(st_temp), **self.specg)
 
         if event.key.upper() == 'H':  # toggle help menu
             if self.menu_print is not None:
@@ -1838,8 +1861,8 @@ class InteractivePlot:
             xlims = self.ax.get_xlim()
             plt.close(self.fig)
             self.quit = True
-            self.st_current = self.st_current.slice(self.st[0].stats.starttime + xlims[0],
-                                                    self.st[0].stats.starttime + xlims[1])
+            self.st_current = self.st_current.slice(self.tmin + xlims[0],
+                                                    self.tmin + xlims[1])
             self.disconnect()
 
         if event.key.upper() == 'R':  # go back to previous zoom
@@ -1857,7 +1880,7 @@ class InteractivePlot:
 
         if event.key.upper() == 'T':  # print timestamp
             try:
-                temp = str(self.st[0].stats.starttime + event.xdata)
+                temp = str(self.tmin + event.xdata)
                 print(temp)
                 self.print1.append('> '+temp)
             except:
@@ -1980,11 +2003,11 @@ class InteractivePlot:
         if redraw is True:
             self.fig = recsec(self.st_current, xlim=np.sort(self.xlims[-2:]),
                               ylim=ylims, scalfact=self.scalfact,
-                              update=update, fighandle=self.fig,
+                              update=update, fighandle=self.fig, tscale=self.tscale,
                               norm=self.normflag, indfirst=self.indfirst,
                               maxtraces=self.maxtraces, textline=self.print1, textbox=True,
                               menu=self.menu_print, processing=self.processing_print,
-                              quickdraw=self.quickdraw)
+                              quickdraw=self.quickdraw, vlines=self.vlines)
 
     def on_scroll(self, event):
         """
@@ -1996,17 +2019,19 @@ class InteractivePlot:
             if event.button == 'down':  # view traces below
                 self.indfirst = min(self.indfirst+1, len(self.st_current)-self.maxtraces)
                 self.fig = recsec(self.st_current, xlim=np.sort(self.xlims[-2:]),
-                                  scalfact=self.scalfact, update=True,
+                                  scalfact=self.scalfact, update=True, tscale=self.tscale,
                                   fighandle=self.fig, norm=self.normflag,
                                   indfirst=self.indfirst, maxtraces=self.maxtraces,
-                                  textline=self.print1, menu=self.menu_print, textbox=True)
+                                  textline=self.print1, menu=self.menu_print,
+                                  textbox=True, vlines=self.vlines)
             elif event.button == 'up':  # go back up to view other traces
                 self.indfirst = max(self.indfirst-1, 0)
                 self.fig, = recsec(self.st_current, xlim=np.sort(self.xlims[-2:]),
                                    scalfact=self.scalfact, update=True, fighandle=self.fig,
-                                   norm=self.normflag, indfirst=self.indfirst,
+                                   norm=self.normflag, indfirst=self.indfirst, tscale=self.tscale,
                                    maxtraces=self.maxtraces, textline=self.print1,
-                                   menu=self.menu_print, textbox=True)
+                                   menu=self.menu_print, textbox=True,
+                                   vlines=self.vlines)
 
 
 def nextpow2(val):

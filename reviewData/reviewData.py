@@ -18,52 +18,68 @@ import urllib2
 from scipy.stats import mode
 from sigproc import sigproc
 
-"""
-Functions for downloading and interacting with seismic data. Based on obspy.
+"""Functions built around obspy for conveniently downloading and interacting with seismic data
+
 Written by kallstadt@usgs.gov
-
 """
 
 
-def getdata(network, station, location, channel, t1, t2, attach_response=True,
-            savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
-            loadfromfile=False, reloadfile=False, detrend='demean', merge=True, pad=True, fill_value=0.):
+def getdata(network, station, location, channel, starttime, endtime, attach_response=True,
+            clientname='IRIS', savedat=False, folderdat='data',
+            filenamepref='Data_', loadfromfile=False, reloadfile=False,
+            detrend='demean', merge=True, pad=True, fill_value=0.):
+    """This function grabs data using FDSN webservices
+
+    This is a wrapper around obspy.clients.fdsn that also can automatically
+    perform some tasks like saving the data, calling it from memory if already
+    saved rather than reloading, and performing basic processing automatically
+
+    Args:
+        network (str): seismic network codes, comma separated in a single string
+            Example: 'NF,IW,RE,TA,UU'
+        station (str): station names, comma separated in a single string
+            Example: 'BFR,WOY,TCR,WTM'
+        location (str): location codes, comma separated in a single string
+            Example: '01,00' or more commonly, just use '*' for all
+        channel (str): channels to use, comma separated in a single string
+            Example: 'BHZ,BHE,BHN,EHZ'
+        starttime: obspy UTCDateTime object of start time
+        endtime: obspy UTCDateTime object of end time
+        attach_response (bool): attach station response info? True or False
+            (default True)
+        clientname (str): source of data from FDSN webservices: 'IRIS','NCEDC',
+            'GEONET' etc. - see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
+        savedat (bool): True or False, save data locally so it doesn't need to
+            be redownloaded to look at it again
+        folderdat (str): folder in which to save data, if you save it
+        filenamepref (str): - prefix for filename, if you are saving data
+        loadfromfile (bool): True or False - if a file from this time period is
+            already on the computer, if you say True, it will automatically use
+            that file without asking if you want to use it
+        reloadfile (bool): if True, will reload locally saved file without asking first
+        detrend (str): method to use for detrending in obspy.detrend() before
+            merging (if applicable), if None, no detrending will be applied
+        merge (bool): if True, will try to merge all traces and will fill with fill_value
+        pad (bool): if True, will pad all to be the same length
+        fill_value (float or str): fill value for any gaps while merging
+
+    Returns:
+        ObsPy stream object containing data that was available for download
+            in the same order as input station list
+
     """
-    Get data from IRIS (or NCEDC) if it exists, save it
-    USAGE
-    st = getdata(network, station, location, channel, t1, t2, attach_response=True,
-            savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
-            loadfromfile=False)
+    # strip out white space in inputs
+    network = network.replace(' ', '')
+    station = station.replace(' ', '')
+    location = location.replace(' ', '')
+    channel = channel.replace(' ', '')
 
-    INPUTS
-    network - seismic network codes, comma separated and no spaces Example: 'NF,IW,RE,TA,UU'
-    station - station names, comma separated and no spaces Example: 'BFR,WOY,TCR,WTM'
-    location - location codes, comma separated and no spaces Example: '01,00' or more commonly, just use '*' for all
-    channel - channels to use. Example: 'BHZ,BHE,BHN,EHZ'
-    t1 - UTCDateTime(starttime)
-    t2 - UTCDateTime(endtime)
-    attach_response - attach station response info?
-    savedat - True or False, save data locally so it doesn't need to be redownloaded to look at it again
-    folderdat - folder in which to save data, if you save it
-    filenamepref - prefix for filename, if you are saving data
-    clientname - source of data from FDSN webservices: 'IRIS','NCEDC', 'GEONET' etc. - see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
-    loadfromfile - True or False - if a file from this time period is already on the computer, if you say True, it will automatically use that file without asking if you want to use it
-    reloadfile - if True, will reload locally saved file without asking first
-    detrend - method to use for detrending all traces (before merging), if None, no detrending will be applied
-    merge - if True, will try to merge all traces and will fill with fill_value
-    pad - if True, will pad all to be the same length
-    fill_value - fill value for any gaps while merging
-
-
-    OUTPUTS
-    st_ordered - ObsPy stream object that is in the same order as input station list
-    """
     #create directory if need be
     if not os.path.exists(folderdat) and savedat is True:
         os.makedirs(folderdat)
     #create file name
-    #filename = filenamepref+str(t1)+str(t2)
-    filename = filenamepref+t1.strftime('%Y-%m-%dT%H%M')+'_'+t2.strftime('%Y-%m-%dT%H%M')
+    filename = '%s%s_%s' % (filenamepref, starttime.strftime('%Y-%m-%dT%H%M'),
+                            endtime.strftime('%Y-%m-%dT%H%M'))
     #see if it exists already
     if os.path.exists(folderdat+'/'+filename):
         if loadfromfile is True:
@@ -80,8 +96,8 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
     else:
         try:
             client = FDSN_Client(clientname)
-            st = client.get_waveforms(network, station, location, channel,
-                                      t1, t2, attach_response=True)
+            st = client.get_waveforms(network.strip(' '), station, location, channel,
+                                      starttime, endtime, attach_response=True)
             # if any have integer data, turn into float
             for tr in st:
                 tr.data = tr.data.astype(float)
@@ -137,41 +153,48 @@ def getdata(network, station, location, channel, t1, t2, attach_response=True,
     return st_ordered
 
 
-def getdata_exact(stations, t1, t2, attach_response=True,
-                  savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
-                  loadfromfile=False, reloadfile=False, detrend='demean', merge=True, pad=True, fill_value=0.):
-    """
-    Same as getdata, but only gets exact station channel combos specified instead of grabbing all (takes longer)
-    Get data from IRIS (or NCEDC) if it exists, save it
-    USAGE
-    st = getdata(network, station, location, channel, t1, t2, attach_response=True,
-            savedat=False, folderdat='data', filenamepref='Data_', clientname='IRIS',
-            loadfromfile=False)
+def getdata_exact(stations, starttime, endtime, attach_response=True, clientname='IRIS',
+                  savedat=False, folderdat='data', filenamepref='Data_',
+                  loadfromfile=False, reloadfile=False, detrend='demean',
+                  merge=True, pad=True, fill_value=0.):
+    """This function grabs exact station data using FDSN webservices
 
-    INPUTS
-    stations = list of tuples in form '[(station,channel,network,loc),]', network, channel and loc can be *
-    t1 - UTCDateTime(starttime)
-    t2 - UTCDateTime(endtime)
-    attach_response - attach station response info?
-    savedat - True or False, save data locally so it doesn't need to be redownloaded to look at it again
-    folderdat - folder in which to save data, if you save it
-    filenamepref - prefix for filename, if you are saving data
-    clientname - source of data from FDSN webservices: 'IRIS','NCEDC', 'GEONET' etc. - see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
-    loadfromfile - True or False - if a file from this time period is already on the computer, if you say True, it will automatically use that file without asking if you want to use it
-    reloadfile - if True, will reload locally saved file without asking first
-    detrend - method to use for detrending all traces (before merging), if None, no detrending will be applied
-    merge - if True, will try to merge all traces and will fill with fill_value
-    fill_value - fill value for any gaps while merging
+    Same as getdata, but only grabs the exact station channel combos specified
+    instead of grabbing all. Note this takes longer than getdata.
 
-    OUTPUTS
-    st_ordered - ObsPy stream object that is in the same order as input station list
+    Args:
+        stations (list): list of tuples in form '[(station,channel,network,loc),]',
+            * wildcard can be used for network, channel and loc
+        starttime: obspy UTCDateTime object of start time
+        endtime: obspy UTCDateTime object of end time
+        attach_response (bool): attach station response info? True or False (default True)
+        clientname (str): source of data from FDSN webservices: 'IRIS','NCEDC',
+            'GEONET' etc. - see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
+        savedat (bool): True or False, save data locally so it doesn't need to
+            be redownloaded to look at it again
+        folderdat (str): folder in which to save data, if you save it
+        filenamepref (str): - prefix for filename, if you are saving data
+        loadfromfile (bool): True or False - if a file from this time period is
+            already on the computer, if you say True, it will automatically use
+            that file without asking if you want to use it
+        reloadfile (bool): if True, will reload locally saved file without asking first
+        detrend (str): method to use for detrending in obspy.detrend() before
+            merging (if applicable), if None, no detrending will be applied
+        merge (bool): if True, will try to merge all traces and will fill with fill_value
+        pad (bool): if True, will pad all to be the same length
+        fill_value (float or str): fill value for any gaps while merging
+
+    Returns:
+        ObsPy stream object containing data that was available for download
+            in the same order as input station list
+
     """
     #create directory if need be
     if not os.path.exists(folderdat) and savedat is True:
         os.makedirs(folderdat)
     #create file name
-    #filename = filenamepref+str(t1)+str(t2)
-    filename = filenamepref+t1.strftime('%Y-%m-%dT%H%M')+'_'+t2.strftime('%Y-%m-%dT%H%M')
+    filename = '%s%s_%s' % (filenamepref, starttime.strftime('%Y-%m-%dT%H%M'),
+                            endtime.strftime('%Y-%m-%dT%H%M'))
     #see if it exists already
     if os.path.exists(folderdat+'/'+filename):
         if loadfromfile is True:
@@ -192,7 +215,7 @@ def getdata_exact(stations, t1, t2, attach_response=True,
             for statup in stations:
                 try:
                     sttemp = client.get_waveforms(statup[2], statup[0], statup[3], statup[1],
-                                                  t1, t2, attach_response=True)
+                                                  starttime, endtime, attach_response=True)
                                 # if any have integer data, turn into float
                     for tr in sttemp:
                         tr.data = tr.data.astype(float)
@@ -242,40 +265,55 @@ def getdata_exact(stations, t1, t2, attach_response=True,
     return st
 
 
-def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_response=True,
-                    savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False,
-                    detrend='demean', merge=True, pad=True, fill_value=0.):
-    """
-    Get data from winston waveserver
-    USAGE
-    st = getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_response=True,
-                    savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False)
-    INPUTS
-    stations = list of tuples in form '[(station,channel,network),]', network and channel can be *
-    okchannels = string listing which channels are ok, e.g. 'EHZ,BHZ', if all are ok, insert * (default)
-    t1 - UTCDateTime(starttime)
-    t2 - UTCDateTime(endtime)
-    attach_response - True or False, attach station response info?
-    savedat - True or False, save data locally so it doesn't need to be redownloaded to look at it again?
-    folderdat - folder in which to save data, if you save it
-    filenamepref - prefix for filename, if you are saving data
-    clientname - winston waveserver to get data from
-    port - port number
-    loadfromfile - True or False - if a file from this time period is already on the computer, if you say True, it will automatically use that file without asking if you want to use it
-    reloadfile - if True, will reload locally saved file without asking first
-    detrend - method to use for detrending all traces (before merging), if None, no detrending will be applied
-    merge - if True, will try to merge all traces and will fill with fill_value
-    fill_value - fill value for any gaps while merging
+def getdata_winston(stations, starttime, endtime, ewclientname, port, chanuse='*',
+                    attach_response=True, respclientname='IRIS', savedat=False,
+                    folderdat='data', filenamepref='Data_', loadfromfile=False,
+                    reloadfile=False, detrend='demean', merge=True, pad=True,
+                    fill_value=0.):
+    """Get data from winston waveserver
 
-    OUTPUTS
-    st - ObsPy stream object that is in the same order as input station list
+    Same as getdata, but only grabs the exact station channel combos specified
+    instead of grabbing all. Note this takes longer than getdata.
+
+    Args:
+        stations (list): list of tuples in form '[(station,channel,network,loc),]',
+            * wildcard can be used for network, channel and loc
+        starttime: obspy UTCDateTime object of start time
+        endtime: obspy UTCDateTime object of end time
+        ewclientname: Earthworm client name (may be an ip address)
+        port: Earthworm port number
+        chanuse (str): which channels to keep in comma separate single string,
+            e.g. 'EHZ,BHZ', if all are ok, insert * (default)
+        attach_response (bool): Try to attach station response info?
+            True or False (default True), will try to get response info from
+            FDSN client specified by respclientname
+        respclientname (str): source of data from FDSN webservices: 'IRIS','NCEDC',
+            'GEONET' etc. - see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
+        savedat (bool): True or False, save data locally so it doesn't need to
+            be redownloaded to look at it again
+        folderdat (str): folder in which to save data, if you save it
+        filenamepref (str): - prefix for filename, if you are saving data
+        loadfromfile (bool): True or False - if a file from this time period is
+            already on the computer, if you say True, it will automatically use
+            that file without asking if you want to use it
+        reloadfile (bool): if True, will reload locally saved file without asking first
+        detrend (str): method to use for detrending in obspy.detrend() before
+            merging (if applicable), if None, no detrending will be applied
+        merge (bool): if True, will try to merge all traces and will fill with fill_value
+        pad (bool): if True, will pad all to be the same length
+        fill_value (float or str): fill value for any gaps while merging
+
+    Returns:
+        ObsPy stream object containing data that was available for download
+            in the same order as input station list
+
     """
     #create directory if need be
     if not os.path.exists(folderdat):
         os.makedirs(folderdat)
     #create file name
-    #filename = filenamepref+str(t1)+str(t2)
-    filename = filenamepref+t1.strftime('%Y-%m-%dT%H%M')+'_'+t2.strftime('%Y-%m-%dT%H%M')
+    filename = '%s%s_%s' % (filenamepref, starttime.strftime('%Y-%m-%dT%H%M'),
+                            endtime.strftime('%Y-%m-%dT%H%M'))
     #see if it exists already
     if os.path.exists(folderdat+'/'+filename):
         if loadfromfile is True:
@@ -294,10 +332,10 @@ def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_respo
         flag = 0
         for sta in stations:
             #get station, channel, network and do some logic
-            if sta[1] in okchannels or okchannels == '*':
+            if sta[1] in chanuse or chanuse == '*':
                 try:
-                    client = ew_client(clientname, port)
-                    temp = client.get_waveforms(sta[2], sta[0], '', sta[1], t1, t2)
+                    client = ew_client(ewclientname, port)
+                    temp = client.get_waveforms(sta[2], sta[0], '', sta[1], starttime, endtime)
                     for tr in temp:
                         tr.data = tr.data.astype(float)
                     if detrend is not None:
@@ -319,7 +357,7 @@ def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_respo
                 if pad:
                     st.trim(starttime=mint, pad=True, fill_value=fill_value)
                 if attach_response is True:
-                    client = FDSN_Client('IRIS')  # try to get responses from IRIS and attach them
+                    client = FDSN_Client(respclientname)  # try to get responses and attach them
                     try:
                         client._attach_responses(st)
                     except:
@@ -334,30 +372,48 @@ def getdata_winston(stations, okchannels, t1, t2, clientname, port, attach_respo
             print('No data returned')
 
 
-def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_response=False, savedat=False,
-                folderdat='data', filenamepref='Data_', loadfromfile=False, reloadfile=False, detrend='demean',
-                merge=True, pad=True, fill_value=0.):
-    """
-    Read in sac or mseed files
-    USAGE
-    st = getdata_sac(filenames, starttime=None, endtime=None, attach_response=False, chanuse='*', savedat=False, folderdat='data', filenamepref='Data_', loadfromfile=False)
-    INPUTS
-    filenames - list of sac filenames (e.g. glob output)
-    starttime - UTCDateTime(starttime), if None, it will use start time of sac file
-    endtime - UTCDateTime(endtime), if None, it will use end time of sac file
-    attach_response - True or False, attach station response info?
-    chanuse - single string of comma separated channels that are okay to use - * loads all channels of files specified. This is default
-    savedat - True or False, save data locally so it doesn't need to be redownloaded to look at it again?
-    folderdat - folder in which to save data, if you save it
-    filenamepref - prefix for filename, if you are saving data
-    loadfromfile - True or False - if a file from this time period is already on the computer, if you say True, it will automatically use that file without asking if you want to use it
-    reloadfile - if True, will reload locally saved file without asking first
-    detrend - method to use for detrending all traces (before merging), if None, no detrending will be applied
-    merge - if True, will try to merge all traces and will fill with fill_value
-    fill_value - fill value for any gaps while merging
+def getdata_filenames(filenames, chanuse='*', starttime=None, endtime=None,
+                      attach_response=False, respclientname='IRIS', savedat=False,
+                      folderdat='data', filenamepref='Data_', loadfromfile=False,
+                      reloadfile=False, detrend='demean', merge=True, pad=True,
+                      fill_value=0.):
+    """Read in sac, mseed or other locally stored files
 
-    OUTPUTS
-    st - ObsPy stream object that is in the same order as input station list
+    Note that this function is only more useful than obspy.read in that it can
+    save subsets of larger files for easier access and can attach response
+    information (if available)
+
+    Args:
+        filenames (list): list of full filenames (e.g. glob output)
+            * wildcard can be used for network, channel and loc
+        chanuse (str): which channels to keep in comma separate single string,
+            e.g. 'EHZ,BHZ', if all are ok, insert * (default)
+        starttime: obspy UTCDateTime object of start time
+        endtime: obspy UTCDateTime object of end time
+
+        attach_response (bool): Try to attach station response info?
+            True or False (default True), will try to get response info from
+            FDSN client specified by respclientname
+        respclientname (str): source of data from FDSN webservices: 'IRIS','NCEDC',
+            'GEONET' etc. - see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
+        savedat (bool): True or False, save data locally so it doesn't need to
+            be redownloaded to look at it again
+        folderdat (str): folder in which to save data, if you save it
+        filenamepref (str): - prefix for filename, if you are saving data
+        loadfromfile (bool): True or False - if a file from this time period is
+            already on the computer, if you say True, it will automatically use
+            that file without asking if you want to use it
+        reloadfile (bool): if True, will reload locally saved file without asking first
+        detrend (str): method to use for detrending in obspy.detrend() before
+            merging (if applicable), if None, no detrending will be applied
+        merge (bool): if True, will try to merge all traces and will fill with fill_value
+        pad (bool): if True, will pad all to be the same length
+        fill_value (float or str): fill value for any gaps while merging
+
+    Returns:
+        ObsPy stream object containing data that was available for download
+            in the same order as input station list
+
     """
     #create directory if need be
     if not os.path.exists(folderdat):
@@ -367,14 +423,16 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
         filename = filenamepref
     else:
         #filename = filenamepref+str(starttime)+str(endtime)
-        filename = filenamepref+starttime.strftime('%Y-%m-%dT%H%M')+'_'+endtime.strftime('%Y-%m-%dT%H%M')
+        filename = '%s%s_%s' % (filenamepref, starttime.strftime('%Y-%m-%dT%H%M'),
+                                endtime.strftime('%Y-%m-%dT%H%M'))
     #see if it exists already
     if os.path.exists(folderdat+'/'+filename):
         if loadfromfile is True:
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = raw_input('file already exists for this time period, enter Y to load from file, N to reload\n')
+                choice = raw_input('file already exists for this time period, \
+                                   enter Y to load from file, N to reload\n')
             else:
                 choice = 'N'
     else:
@@ -388,12 +446,13 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
                 temp = read(file1)
                 if temp[0].stats.channel in chanuse or chanuse == '*':
                     if attach_response is True:
-                        client = FDSN_Client('IRIS')  # try to get responses from IRIS and attach them
+                        client = FDSN_Client(respclientname)
                         try:
                             client._attach_responses(temp)
                             st += temp
                         except:
-                            print 'could not attach response info for %s, station correction will not work' % temp.stats.station
+                            print 'could not attach response info for %s, \
+                            station correction will not work' % temp.stats.station
                     else:
                         st += temp
             except Exception as e:
@@ -429,7 +488,8 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
                 st = st_new
         if starttime or endtime:
             if pad:
-                st.trim(starttime=starttime, endtime=endtime, pad=True, fill_value=fill_value)
+                st.trim(starttime=starttime, endtime=endtime, pad=True,
+                        fill_value=fill_value)
         else:  # find min start time and trim all to same point
             mint = min([trace.stats.starttime for trace in st])
             if pad:
@@ -439,146 +499,209 @@ def getdata_sac(filenames, chanuse='*', starttime=None, endtime=None, attach_res
     return st
 
 
-def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiuskm=0., maxradiuskm=20., channels='*',
-               location='*', source='IRIS', attach_response=True, savedat=False, folderdat='data', filenamepref='Data_',
-               loadfromfile=False, reloadfile=False, detrend=None,
-               merge=False, pad=True, fill_value=0.):
-    """
-    Automatically pull existing data within a certain distance of the epicenter (or any lat/lon coordinates) and attach station coordinates to data
-    USAGE
-    st = getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200., minradiuskm=0., maxradiuskm=20., channels='*', location='*', source='IRIS')
-    INPUTS
-    event_lat = latitude of event in decimal degrees
-    event_lon = longitude of event in decimal degrees
-    event_time = Event time in UTC in any format obspy's UTCDateTime can parse - e.g. '2016-02-05T19:57:26'
-    tstart = number of seconds to add to event time for start time of data (use negative number to start before event_time)
-    tend = number of seconds to add to event time for end time of data
-    minradiuskm = minium of radius to search for data
-    maxradiuskm = maximum of radius to search for data
-    channels = 'strong motion' to get all strong motion channels (excluding low sample rate ones), 'broadband' to get all broadband instruments, 'short period' for all short period channels, otherwise a single line of comma separated channel codes, * wildcards are okay, e.g. channels = '*N*,*L*'
-    location = comma separated list of location codes allowed, or '*' for all location codes
-    source = FDSN source, 'IRIS', 'NCEDC', 'GEONET' etc., see list here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
-    attach_response - True or False, attach station response info?
-    savedat - True or False, save data locally so it doesn't need to be redownloaded to look at it again?
-    folderdat - folder in which to save data, if you save it
-    filenamepref - prefix for filename, if you are saving data
-    loadfromfile - True or False - if a file from this time period is already on the computer, if you say True, it will automatically use that file without asking if you want to use it
-    reloadfile - if True, will reload locally saved file without asking first
-    detrend - method to use for detrending all traces (before merging), if None, no detrending will be applied
-    merge - if True, will try to merge all traces and will fill with fill_value
-    fill_value - fill value for any gaps while merging
+def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200.,
+               minradiuskm=0., maxradiuskm=20., chanuse='*', location='*',
+               clientnames=['IRIS'], attach_response=True, savedat=False,
+               folderdat='data', filenamepref='Data_', loadfromfile=False,
+               reloadfile=False, detrend=None, merge=False, pad=True,
+               fill_value=0.):
+    """Pull existing data within a certain radius of the epicenter
 
-    OUTPUTS
-    st = obspy stream containing data from within requested area
+    Or from any lat/lon coordinates. Also attaches station coordinates to data
+
+    Args:
+        event_lat (float): latitude in decimal degrees
+        event_lon (float): longitude in decimal degrees
+        event_time: obspy UTCDateTime object of event time
+        tstart (float): Number of seconds after the event time to use as
+            starttime for data (negative numbers will grab data from before)
+        tend (float): Number of seconds after the event time to use as
+            starttime for data
+        minradius (float): minimum radius (km) to search
+        maxradius (float): maximum radius (km) to search
+        chanuse (str): 'strong motion' to get all strong motion channels
+            (excluding low sample rate ones), 'broadband' to get all broadband
+            instruments, 'short period' for all short period channels,
+            otherwise a single line of comma separated channel codes,
+            * wildcards are okay, e.g. channels = '*N*,*L*'
+        location (str): comma separated list of location codes allowed,
+            or '*' for all location codes
+        clientnames (list): list of FDSN clients to search over, e.g. ['IRIS']
+            see list of options here http://docs.obspy.org/archive/0.10.2/packages/obspy.fdsn.html
+        attach_response (bool): Attach station response info (if available)
+        savedat (bool): True or False, save data locally so it doesn't need to
+            be redownloaded to look at it again
+        folderdat (str): folder in which to save data, if you save it
+        filenamepref (str): - prefix for filename, if you are saving data
+        loadfromfile (bool): True or False - if a file from this time period is
+            already on the computer, if you say True, it will automatically use
+            that file without asking if you want to use it
+        reloadfile (bool): if True, will reload locally saved file without asking first
+        detrend (str): method to use for detrending in obspy.detrend() before
+            merging (if applicable), if None, no detrending will be applied
+        merge (bool): if True, will try to merge all traces and will fill with fill_value
+        pad (bool): if True, will pad all to be the same length
+        fill_value (float or str): fill value for any gaps while merging
+
+    Returns:
+        ObsPy stream object containing data that was available for download
+            within the requested area in order of increasing distance
+            from the sourcei
+
     """
     event_time = UTCDateTime(event_time)
-    client = FDSN_Client(source)
+    st_all = Stream()
 
-    if channels.lower() == 'strong motion':
-        channels = 'EN*,HN*,BN*,EL*,HL*,BL*'
-    elif channels.lower() == 'broadband':
-        channels = 'BH*,HH*'
-    elif channels.lower() == 'short period':
-        channels = 'EH*'
-    else:
-        channels = channels.replace(' ', '')  # Get rid of spaces
+    # If clientnames is not a list, make it a list
+    if type(clientnames) != list:
+        clientnames = [clientnames]
 
-    t1 = UTCDateTime(event_time) + tstart
-    t2 = UTCDateTime(event_time) + tend
+    for source in clientnames:
+        client = FDSN_Client(source)
 
-    inventory = client.get_stations(latitude=event_lat, longitude=event_lon, minradius=minradiuskm/111.32,
-                                    maxradius=maxradiuskm/111.32, channel=channels, level='channel', startbefore=t1,
-                                    endafter=t2)
-    temp = inventory.get_contents()
-    netnames = temp['networks']
-    stas = temp['stations']
-    stanames = [n.split('.')[1].split()[0] for n in stas]
+        if chanuse.lower() == 'strong motion':
+            chanuse = 'EN*,HN*,BN*,EL*,HL*,BL*'
+        elif chanuse.lower() == 'broadband':
+            chanuse = 'BH*,HH*'
+        elif chanuse.lower() == 'short period':
+            chanuse = 'EH*'
+        else:
+            chanuse = chanuse.replace(' ', '')  # Get rid of spaces
 
-    #if cutredundant:
+        t1 = UTCDateTime(event_time) + tstart
+        t2 = UTCDateTime(event_time) + tend
 
-    st = getdata(','.join(unique_list(netnames)), ','.join(unique_list(stanames)), location, channels, t1, t2,
-                 attach_response=attach_response, clientname=source, savedat=savedat, folderdat=folderdat,
-                 filenamepref=filenamepref, loadfromfile=loadfromfile, reloadfile=reloadfile)
+        inventory = client.get_stations(latitude=event_lat, longitude=event_lon,
+                                        minradius=minradiuskm/111.32,
+                                        maxradius=maxradiuskm/111.32,
+                                        channel=chanuse, level='channel')
+                                        #startbefore=t1, endafter=t2)
+        temp = inventory.get_contents()
+        netnames = temp['networks']
+        stas = temp['stations']
+        stanames = [n.split('.')[1].split()[0] for n in stas]
 
-    if st is None:
-        print('No data returned')
-        return
+        st = getdata(','.join(unique_list(netnames)), ','.join(unique_list(stanames)),
+                     location, chanuse, t1, t2, attach_response=attach_response,
+                     clientname=source, savedat=savedat, folderdat=folderdat,
+                     filenamepref=filenamepref, loadfromfile=loadfromfile,
+                     reloadfile=reloadfile)
 
-    if detrend is not None:
-        st.detrend(detrend)
-    if merge:
-        try:
-            st.merge(fill_value=fill_value)
-        except:
-            print 'bulk merge failed, trying station by station'
-            st_new = Stream()
-            stationlist = unique_list([trace.stats.station for trace in st])
-            for sta in stationlist:
-                temp = st.select(station=sta)
-                for tr in temp:
-                    tr.data = tr.data.astype(float)
-                try:
-                    temp.merge(fill_value=fill_value)
-                    st_new += temp
-                except:
-                    # Try resampling
-                    sr = [tr.stats.sampling_rate for tr in temp]
-                    news = mode(sr)[0][0]
-                    temp.resample(news)
-                    temp.merge(fill_value=fill_value)
-                    st_new += temp
-                finally:
-                    print('%s would not merge - deleting it') % (sta,)
-            st = st_new
-    for trace in st:
-        try:
-            coord = inventory.get_coordinates(trace.id)
-            trace.stats.coordinates = AttribDict({'latitude': coord['latitude'], 'longitude': coord['longitude'], 'elevation': coord['elevation']})
-        except:
-            print('Could not attach coordinates for %s' % trace.id)
+        if st is None:
+            print('No data returned')
+            return
 
-    return st
+        if detrend is not None:
+            st.detrend(detrend)
+        if merge:
+            try:
+                st.merge(fill_value=fill_value)
+            except:
+                print 'bulk merge failed, trying station by station'
+                st_new = Stream()
+                stationlist = unique_list([trace.stats.station for trace in st])
+                for sta in stationlist:
+                    temp = st.select(station=sta)
+                    for tr in temp:
+                        tr.data = tr.data.astype(float)
+                    try:
+                        temp.merge(fill_value=fill_value)
+                        st_new += temp
+                    except:
+                        # Try resampling
+                        sr = [tr.stats.sampling_rate for tr in temp]
+                        news = mode(sr)[0][0]
+                        temp.resample(news)
+                        temp.merge(fill_value=fill_value)
+                        st_new += temp
+                    finally:
+                        print('%s would not merge - deleting it') % (sta,)
+                st = st_new
+        for trace in st:
+            try:
+                coord = inventory.get_coordinates(trace.id)
+                trace.stats.coordinates = AttribDict({'latitude': coord['latitude'],
+                                                      'longitude': coord['longitude'],
+                                                      'elevation': coord['elevation']})
+            except:
+                print('Could not attach coordinates for %s' % trace.id)
+
+        st_all += st
+
+    return st_all
 
 
-def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10,
-           textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, labelquickdraw=True,
-           processing=None, figsize=None, colors=None, labelsize=12., addscale=False, unitlabel=None, convert=1.,
-           scaleperc=0.9, vlines=None, vlinestyle='--', vlinecolor='k', pad=False, fill_value=0.):
-    """
-    Plot record section of data from an obspy stream
-    USAGE
-    fig = recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=False, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None))
+def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False,
+           fighandle=None, indfirst=0, maxtraces=10, textbox=False,
+           textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True,
+           labelquickdraw=True, processing=None, figsize=None, colors=None,
+           labelsize=12., addscale=False, unitlabel=None, convert=1.,
+           scaleperc=0.9, vlines=None, vlinestyle='--', vlinecolor='k',
+           pad=False, fill_value=0., xonly=False, samezero=False, grid=True,
+           title=True, labellist=None, labelloc='left'):
+    """Plot record section of data from an obspy stream
 
-    INPUTS
-    st = obspy stream to plot
-    norm = True or False, normalize each trace by its maximum
-    xlim, ylim = tuple of axes limits e.g. (0,100) - None uses default axis limits
-    scalfact = scaling factor for plotting, 1 is default, 2 would be double the amplitudes and so on.
-    update = flag to signal if this is a new plot (False) or an update (True)
-    fighandle = fig handle of plot to update (new handle name is given if figure isn't already open)
-    indfirst = index of first trace to plot (scroll down to see rest)
-    maxtraces = maximum number of traces to plot
-    textbox = True or False - whether to show the textbox (required for InteractivePlot)
-    textline = text that will be printed in the text box, each line separated by a comma.
-    menu = Text of help menu to print, None for no help menu
-    quickdraw = Uses obsPy's minmax plot method to make plotting much faster if there are more than 30 samples per pixel on the plot
-    processing = True to show processing history, otherwise None
-    figsize = tuple of figure size in inches e.g., (10, 10) is 10x10inches, (width, height)
-    colors = list of colors to apply to each trace
-    labelsize = font size for labels
-    addscale = add a scale bar to each trace showing the amplitudes
-    unitlabel = Label for scale bar
-    convert = Factor to multipy by to convert data amplitudes into unitlabel units (e.g. to convert m/s to mm/s, convert=10**3)
-    scalebarperc = percent of total axis width over from left edge of plot to place scale bar
-    vlines = None, or array of UTCDateTimes where vertical lines should be placed (e.g. to show event start times)
-    pad = whether to pad traces so they are all the same length
-    fill_value = fill value to pad with, if None, will create masked array, which may present challenges to further processing the data
+    Args:
+        st: obspy stream to plot
+        norm (bool): True or False, normalize each trace by its maximum
+        xlim (tup): tuple of axes limits e.g. (0,100) - None uses default axis limits
+        ylim (tup): tuple of axes limits e.g. (0,100) - None uses default axis limits 
+        scalfact (float): scaling factor for plotting, 1 is default,
+            2 would be double the amplitudes, 0.5 halves them etc.
+        update (bool): False if this is a new plot (False), True if it's an update
+        fighandle: figure handle of plot to update. New handle name is given if
+            figure isn't already open.
+        indfirst (int): index of first trace of st to plot
+        maxtraces (int): maximum number of traces to plot
+        textbox (bool): Whether to show the textbox (required for InteractivePlot)
+        textline (list): List of lines of text that will be printed in text box.
+        menu (str) = Text of help menu to print, None for no help menu
+        quickdraw (bool): Whether to use obsPy's minmax plot method to make
+            plotting much faster. Only applies if there are more than 30
+            samples per pixel on the plot.
+        labelquickdraw (bool): Whether to label the plot with a qd in the upper
+            right corner, indicating quickdraw is on.
+        processing (bool): Whether to show processing history saved in stats,
+            otherwise None
+        figsize (tuple): tuple of figure size in inches e.g., (10, 10)
+            is 10x10inches, (width, height)
+        colors (list) = list of colors to apply to each trace or single color
+            to apply to all traces. If None, will use defaults.
+        labelsize (float): font size for labels
+        addscale (bool): add a scale bar to each trace showing the amplitudes
+        unitlabel (str) = String of label for scale bar, if None, won't label.
+        convert (float): Factor to multipy by to convert data amplitudes into
+            unitlabel units (e.g. to convert m/s to mm/s, convert=10**3)
+        scalebarperc (float): proportion of total axis width over from left
+            edge of plot to place scale bar (between 0 and 1)
+        vlines: None, or array of obspy UTCDateTimes where vertical lines
+            should be placed (e.g. to show event start times)
+        vlinestyle (str): vline style shortcut e.g. '--'
+        vlinecolor (str): vline color shortcut e.g. 'k'
+        pad (bool): whether to pad traces so they are all the same length
+        fill_value (float or int): fill value to pad with, if None, will create
+            masked array, which may present challenges to further processing the data
+        xonly (bool): if True, only bottom x-axis will be visible
+        samezero (bool): if True, will line all traces up so the first sample
+            is at zero regardless of actual start time.
+        grid (bool): if True, grid on
+        title (bool): if True, title will be added
+        labellist (list): if None, will create own labels, otherwise list of
+            labels corresponding to each trace (same order as st)
+        labelloc (str): 'left' will be left of traces, 'below' will be below
+            each trace at left, 'above' will be above each trace at left
 
-    OUTPUTS
-    fig = handle of figure
+
+    Returns:
+        handle of figure
+
     """
     # Make sure not to modify the original
     st = st.copy()
+
+    if samezero:
+        for tr in st:
+            tr.stats.starttime = UTCDateTime(1970, 1, 1, 0, 0, 0)
     try:
         maxtraces = min(len(st), maxtraces)
         maxtraces = int(maxtraces)
@@ -586,12 +709,32 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
         print('st is empty')
         return
     #set up color cycling
-    if colors is None or len(colors) != len(st):
+    if type(colors) == str:
+        rep = len(st)*[colors]
+    elif colors is None or len(colors) != len(st):
         colors_ = ['r', 'b', 'g', 'm', 'k', 'c']
         rep = int(np.ceil(float(len(st))/float(len(colors_))))*colors_
         rep = rep[0:len(st)]
     else:
         rep = colors
+
+    if update is True and fighandle is not None:
+        try:
+            fig = fighandle
+            if textbox is True:
+                axbox, ax = fig.get_axes()
+                boxes = ax.texts
+                for b in boxes:
+                    b.remove()
+            else:
+                ax = fig.get_axes()
+        except:
+            print 'need to define fighandle correctly to update current plot, creating new figure'
+            update = False
+    elif update is True and fighandle is None:
+        print('Cannot update without specifying a figure handle, creating new figure')
+        update = False
+
 
     if update is False:
         if figsize is None:
@@ -603,20 +746,11 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
             ax = fig.add_axes([0.2, 0.2, 0.75, 0.75])  # left bottom width height
         else:
             ax = fig.add_axes([0.23, 0.1, 0.72, 0.8])
-    elif update is True:
-        try:
-            fig = fighandle
-            if textbox is True:
-                axbox, ax = fig.get_axes()
-                boxes = ax.texts
-                for b in boxes:
-                    b.remove()
-            else:
-                ax = fig.get_axes()
-        except:
-            print 'need to define fighandle to update current plot'
-            return
-    labels = []
+
+    if labellist is None:
+        labels = []
+    else:
+        labels = labellist
     yticks1 = []
     maxy = 0
     miny = 0
@@ -630,6 +764,9 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
 
     if xlim is None:
         xlim = [0, tmax-tmin]
+
+    # get x location of scale bar to apply to all
+    xerrloc = tmin + ((tmax-tmin) * scaleperc)
 
     avgmax = np.median(np.absolute(st.max()))  # parameter used for scaling traces relative to each other
     i = 0
@@ -670,8 +807,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
             staname = ('%s - %2.1f km') % (temp, st1.stats.rdist)
         except:
             staname = st1.stats.station+'.'+st1.stats.channel+'.'+st1.stats.location+'.'+st1.stats.network
-        # get x location of scale bar to apply to all
-        xerrloc = tvec.min() + ((tvec.max()-tvec.min()) * scaleperc)
+
         # Plot data
         try:
             if norm is True:
@@ -690,7 +826,8 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
                 if tempmin < miny:
                     miny = tempmin
                 yticks1.append(yloc)
-                labels.append(staname)
+                if labellist is None:
+                    labels.append(staname)
                 fig.stationsy[yloc] = staname
                 if addscale:
                     ax.errorbar(xerrloc, yloc, yerr=0.5, color='0.5')
@@ -717,7 +854,8 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
                 if tempmin < miny:
                     miny = tempmin
                 yticks1.append(yloc)
-                labels.append(staname)
+                if labellist is None:
+                    labels.append(staname)
                 fig.stationsy[yloc] = staname
                 if addscale:
                     if i == 0:
@@ -735,30 +873,41 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
     if missing == len(st):
         print 'nothing to see over here, go back'
     plt.tick_params(left='off', right='off')
-    plt.tick_params(axis='both', which='major', labelsize=labelsize)
-    plt.xlabel('Time (sec)', fontsize=labelsize)  # plt.xlabel(xlab)
+    plt.tick_params(axis='both', which='major', labelsize=12)
+    plt.xlabel('Time (sec)', fontsize=12)  # plt.xlabel(xlab)
     plt.autoscale(enable=True, axis='y', tight=True)
     plt.yticks(yticks1)
-    ax.set_yticklabels(labels, fontsize=labelsize)
+    if labelloc == 'below':
+        ax.set_yticklabels(labels, fontsize=labelsize, position=(0, 0), ha='left', va='top')
+    elif labelloc == 'above':
+        ax.set_yticklabels(labels, fontsize=labelsize, position=(0, 0), ha='left', va='bottom')
+    else:
+        ax.set_yticklabels(labels, fontsize=labelsize)
     ax.set_xlim(xlim[0], xlim[1])
     if ylim is not None:
         ax.set_ylim(ylim[0], ylim[1])
     else:
         ax.set_ylim(miny, maxy)
-    plt.grid('on')
+    if grid:
+        plt.grid('on')
     mcs = ('%.2f' % (st[0].stats.starttime.microsecond/10.**6)).replace('0.', '')
     timeprint = st[0].stats.starttime.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
-    if len(st) <= maxtraces:
-        title1 = 'Start time: %s (UTC) - %i traces' % (timeprint, len(st))
+    if samezero:
+        sttm = ''
     else:
-        title1 = 'Start time: %s (UTC)  - Traces %i through %i of %i' % (timeprint, indfirst+1, indfirst+maxtraces, len(st))
-    if addscale is True and unitlabel is not None:
-        title1 = title1 + ' - Units = %s' % unitlabel
-    if norm:
-        title1 = title1 + ' - normalized to maxes'
-    else:
-        title1 = title1 + ' - same amplitudes'
-    plt.title(title1, fontsize=labelsize + 1.)
+        sttm = 'Start time: %s (UTC) - ' % timeprint
+    if title:
+        if len(st) <= maxtraces:
+            title1 = '%s%i traces' % (sttm, len(st))
+        else:
+            title1 = '%sTraces %i through %i of %i' % (sttm, indfirst+1, indfirst+maxtraces, len(st))
+        if addscale is True and unitlabel is not None:
+            title1 = title1 + ' - Units = %s' % unitlabel
+        if norm:
+            title1 = title1 + ' - normalized to maxes'
+        else:
+            title1 = title1 + ' - same amplitudes'
+        plt.title(title1, fontsize=labelsize + 1.)
     if hasattr(st[0].stats, 'processing'):
         proc = wrap('PROCESSING HISTORY: %s' % ' - '.join(st[0].stats.processing[0:]), 50)
     else:
@@ -778,6 +927,11 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, figha
         axbox.set_yticks([])
         axbox.set_xticks([])
         axbox.text(0.01, 0.99, '\n'.join(textline[-5:]), transform=axbox.transAxes, fontsize=12, verticalalignment='top')
+
+    if xonly:
+        ax.spines["right"].set_visible(False)
+        ax.spines["top"].set_visible(False)
+        ax.spines["left"].set_visible(False)
 
     if vlines is not None:
         for vlin in vlines:
@@ -1062,6 +1216,7 @@ class InteractivePlot:
     quickdraw = if True, will downsample strategically to speed up plotting
     processing = if None, won't show the processing that has been applied to the data, otherwise will show whatever is entered for processing
     taper = taper to apply before filtering, if None, no tapering will be applied (default 0.05, 5% taper)
+    specg = dictionary of inputs for make_spectrogram
 
     OUTPUTS - everything that is stored in self (called zp in above example) can be accessed after exiting, here are a few of the most useful ones
     zp.st_current = processed data in time window that was used
@@ -1070,17 +1225,27 @@ class InteractivePlot:
     zp.st_original = original data
 
     TODO
+    Absolute timeline option
+    Add vertical lines
     Make picking phases a width of uncertainty rather than weight
     Use RectangleSelector widget to zoom
     Backspace functionality for inputs
     Interactively editable spectrogram options
     Fix Box zooming
     Make axis change from seconds to minutes or hours as needed
+
+            make_spectrogram(st_temp, detrend=mlab.detrend_linear, maxtraces=len(st_temp),
+                             wlen=((st_temp[0].stats.endtime-st_temp[0].stats.starttime)/150.),
+                             overperc=0.9, log1=True, maxPower=100000, minPower=100,
+                             freqmax=st_temp[0].stats.sampling_rate/2., colorb=True)
+
     """
 
     def __init__(self, st, fig=None, indfirst=0, maxtraces=10, norm=True, xlim=None, ylim=None, scalfact=1.,
                  cosfilt=(0.01, 0.02, 20, 30), water_level=60, output='VEL', textline=['>', '>', '>', '>', '>'],
-                 menu=None, quickdraw=True, processing=None, taper=0.05):
+                 menu=None, quickdraw=True, processing=None, taper=None,
+                 specg = {'detrend': mlab.detrend_linear, 'wlen': None, 'norm': True, 'overperc': 0.85, 'log1': True,
+                          'maxPower': None, 'minPower': None, 'freqmax': None}):
         """
         Initializes the class with starting values
         (st, norm=True, xlim=None, ylim=None, scalfact=1., update=False, fighandle=[], indfirst=0, maxtraces=10, textbox=True, textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True, processing=None)
@@ -1520,7 +1685,7 @@ class InteractivePlot:
             st_temp = st_temp[self.indfirst:self.indfirst+self.maxtraces+1]
             make_spectrogram(st_temp, detrend=mlab.detrend_linear, maxtraces=len(st_temp),
                              wlen=((st_temp[0].stats.endtime-st_temp[0].stats.starttime)/150.),
-                             overperc=0.9, log1=True, maxPower=1000000, minPower=1,
+                             overperc=0.9, log1=True, maxPower=100000, minPower=100,
                              freqmax=st_temp[0].stats.sampling_rate/2., colorb=True)
 
         if event.key.upper() == 'H':  # toggle help menu

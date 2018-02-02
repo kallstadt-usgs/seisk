@@ -371,25 +371,33 @@ def kurtosis(st, winlen, BaillCF=False):
     return st
 
 
-def spectrum(trace, win=None, nfft=None, plot=False, powerspec=False, scaling='spectrum'):
+def spectrum(st, win=None, nfft=None, plot=False, powerspec=False, scaling='spectrum'):
     """
-    Make amplitude spectrum of trace and plot using rfft (for real inputs, no negative frequencies)
-    USAGE
-    freqs, amps = spectrum(trace, win=None, plot=False)
-    INPUTS
-    trace = obspy trace object
-    win = tuple of time window in seconds (e.g. win=(3., 20.)) over which to compute amplitude spectrum
-    nfft = number of points to use in nfft, default None uses the next power of 2 of length of trace
-    plot = True, plot spectrum, False, don't
-    powerspec = False for fourier amplitude spectrum, True for power spectrum
-    scaling = if powerspec is True, 'density' or 'spectrum' for power spectral density (V**2/Hz) or power spectrum (V**2)
-    OUTPUTS
-    freqs = frequency vector, only positive values
-    amps = amplitude vector
+    Make amplitude spectrum of traces in stream and plot using rfft (for real inputs, no negative frequencies)
+
+    Args
+        st = obspy Stream or trace object
+        win = tuple of time window in seconds (e.g. win=(3., 20.)) over which to compute amplitude spectrum
+        nfft = number of points to use in nfft, default None uses the next power of 2 of length of trace
+        plot = True, plot spectrum, False, don't
+        powerspec = False for fourier amplitude spectrum, True for power spectrum
+        scaling = if powerspec is True, 'density' or 'spectrum' for power spectral density (V**2/Hz)
+            or power spectrum (V**2)
+
+    Returns
+        freqs = frequency vector, only positive values
+        amps = amplitude vector
     """
-    tvec = maketvec(trace)  # Time vector
-    dat = trace.data
-    freqs, amps = spectrum_manual(dat, tvec, win, nfft, plot, powerspec, scaling)
+    st = Stream(st)  # turn into a stream object in case st is a trace
+
+    amps = []
+    freqs = []
+    for trace in st:
+        tvec = maketvec(trace)  # Time vector
+        dat = trace.data
+        freq, amp = spectrum_manual(dat, tvec, win, nfft, plot, powerspec, scaling)
+        amps.append(amp)
+        freqs.append(freq)
     return freqs, amps
 
 
@@ -406,6 +414,7 @@ def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False,
     plot = True, plot spectrum, False, don't
     powerspec = False for fourier amplitude spectrum, True for power spectrum
     scaling = if powerspec is True, 'density' or 'spectrum' for power spectral density (V**2/Hz) or power spectrum (V**2)
+
     OUTPUTS
     freqs = frequency vector, only positive values
     amps = amplitude vector

@@ -631,8 +631,8 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200.,
     return st_all
 
 
-def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False,
-           fighandle=None, indfirst=0, maxtraces=10, textbox=False,
+def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
+           update=False, fighandle=None, indfirst=0, maxtraces=10, textbox=False,
            textline=['>', '>', '>', '>', '>'], menu=None, quickdraw=True,
            labelquickdraw=True, processing=None, figsize=None, colors=None,
            labelsize=12., addscale=False, unitlabel=None, convert=1.,
@@ -640,12 +640,19 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False,
            pad=False, fill_value=0., xonly=False, samezero=False, grid=True,
            title=True, labellist=None, labelloc='left'):
     """Plot record section of data from an obspy stream
+    
+    Note that a lot of the functionality is built in for use by
+    InteractivePlot and is not useful for standalone use.
 
     Args:
         st: obspy stream to plot
         norm (bool): True or False, normalize each trace by its maximum
-        xlim (tup): tuple of axes limits e.g. (0,100) - None uses default axis limits
-        ylim (tup): tuple of axes limits e.g. (0,100) - None uses default axis limits 
+        xlim (tup): tuple of axes limits e.g. (0,100), 
+            None uses default axis limits
+        ylim (tup): tuple of axes limits e.g. (0,100),
+            None uses default axis limits
+        tscale (str): 'relative' uses seconds relative to start time for x axis
+            labels, 'absolute' uses absolute time.
         scalfact (float): scaling factor for plotting, 1 is default,
             2 would be double the amplitudes, 0.5 halves them etc.
         update (bool): False if this is a new plot (False), True if it's an update
@@ -690,7 +697,6 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False,
             labels corresponding to each trace (same order as st)
         labelloc (str): 'left' will be left of traces, 'below' will be below
             each trace at left, 'above' will be above each trace at left
-
 
     Returns:
         handle of figure
@@ -759,6 +765,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False,
     # Pad traces so they have same start and end times
     tmin = min([trace.stats.starttime for trace in st])
     tmax = max([trace.stats.endtime for trace in st])
+
     if pad:
         st = st.trim(tmin, tmax, pad=True, fill_value=fill_value)
 
@@ -836,8 +843,10 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False,
                     label1 = label1.lower().replace('+', '').replace('e0', 'e')
                     label2 = '   %.1E' % (0.5*maxval * convert)
                     label2 = label2.lower().replace('+', '').replace('e0', 'e')
-                    ax.text(xerrloc, yloc + 0.5, label2, color='0.5', fontsize=11, horizontalalignment='left', verticalalignment='center')
-                    ax.text(xerrloc, yloc - 0.5, label1, color='0.5', fontsize=11, horizontalalignment='left', verticalalignment='bottom')
+                    ax.text(xerrloc, yloc + 0.5, label2, color='0.5', fontsize=11,
+                            horizontalalignment='left', verticalalignment='center')
+                    ax.text(xerrloc, yloc - 0.5, label1, color='0.5', fontsize=11,
+                            horizontalalignment='left', verticalalignment='bottom')
             else:
                 yloc = -2.*avgmax*i
                 dat = scalfact*dat
@@ -865,8 +874,10 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False,
                         label1 = label1.lower().replace('+', '').replace('e0', 'e').replace('e-0', 'e-')
                         label2 = '   %.1E' % (0.5*maxval/scalfact * convert)
                         label2 = label2.lower().replace('+', '').replace('e0', 'e').replace('e-0', 'e-')
-                        ax.text(xerrloc, yloc + 0.5*maxval, label2, color='0.5', fontsize=11, horizontalalignment='left', verticalalignment='center')
-                        ax.text(xerrloc, yloc - 0.5*maxval, label1, color='0.5', fontsize=11, horizontalalignment='left', verticalalignment='bottom')
+                        ax.text(xerrloc, yloc + 0.5*maxval, label2, color='0.5', fontsize=11,
+                                horizontalalignment='left', verticalalignment='center')
+                        ax.text(xerrloc, yloc - 0.5*maxval, label1, color='0.5', fontsize=11,
+                                horizontalalignment='left', verticalalignment='bottom')
         except:
             missing += 1
         i += 1
@@ -874,7 +885,23 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False,
         print 'nothing to see over here, go back'
     plt.tick_params(left='off', right='off')
     plt.tick_params(axis='both', which='major', labelsize=12)
-    plt.xlabel('Time (sec)', fontsize=12)  # plt.xlabel(xlab)
+    if tscale == 'relative':
+        plt.xlabel('Time (sec)', fontsize=12)
+    else:
+        # Change yaxis labels to absolute time
+        seclabels = ax.get_xticks()
+        newlabs = []
+        for sec in seclabels:
+            value1 = tmin + sec
+            if tmax-tmin > 3600.*24.:# greater than a day, include day but not second
+                newlabs.append(value1.strftime('%d %b-%H:%M'))
+            elif tmax-tmin > 3600.: # greater than an hour, show full seconds
+                newlabs.append(value1.strftime('%d %b-%H:%M:%S'))
+            else:
+                mcs = ('%.2f' % (value1.microsecond/10.**6)).replace('0.', '')
+                newlabs.append(value1.strftime('%H:%M:%S.') + mcs)
+
+        ax.set_xticklabels(newlabs, fontsize=labelsize, rotation=20)
     plt.autoscale(enable=True, axis='y', tight=True)
     plt.yticks(yticks1)
     if labelloc == 'below':
@@ -892,6 +919,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False,
         plt.grid('on')
     mcs = ('%.2f' % (st[0].stats.starttime.microsecond/10.**6)).replace('0.', '')
     timeprint = st[0].stats.starttime.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
+
     if samezero:
         sttm = ''
     else:
@@ -908,6 +936,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False,
         else:
             title1 = title1 + ' - same amplitudes'
         plt.title(title1, fontsize=labelsize + 1.)
+
     if hasattr(st[0].stats, 'processing'):
         proc = wrap('PROCESSING HISTORY: %s' % ' - '.join(st[0].stats.processing[0:]), 50)
     else:
@@ -916,11 +945,14 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False,
     # print processing summary if desired
     if processing is not None:
         #ax.text(0.02, 0.97, '\n'.join(proc), transform=ax.transAxes, fontsize=8, verticalalignment='top', bbox=props)
-        ax.annotate('\n'.join(proc), xy=(0.02, 0.97), xycoords='axes fraction', fontsize=8, verticalalignment='top', bbox=props)
+        ax.annotate('\n'.join(proc), xy=(0.02, 0.97), xycoords='axes fraction',
+                    fontsize=8, verticalalignment='top', bbox=props)
     #print help menu, if desired
     if menu is not None:
         #ax.text(0.02,0.8,menu,transform=ax.transAxes,fontsize=8,verticalalignment='top',bbox=props)
-        ax.annotate(menu, xy=(0.02, 0.8), xycoords='axes fraction', fontsize=8, verticalalignment='top', bbox=props)
+        ax.annotate(menu, xy=(0.02, 0.8), xycoords='axes fraction', fontsize=8,
+                    verticalalignment='top', bbox=props)
+
     #print command line box
     if textbox is True:
         axbox.clear()
@@ -950,6 +982,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., update=False,
         ax.figure.canvas.draw()
         if textbox is True:
             axbox.figure.canvas.draw()
+
     return fig
 
 

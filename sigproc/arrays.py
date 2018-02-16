@@ -15,6 +15,7 @@ import matplotlib.dates as mdates
 import glob
 import os
 from scipy.fftpack import fft, ifft, ifftshift
+from reviewData.reviewData import unique_list
 
 
 def correlation_analysis(st, flow, fhigh, plotfit=True, plotdots=True):
@@ -243,11 +244,18 @@ def plotARF_k(coords, klim, kstep, coordsys='xy'):
     plt.show()
 
 
-def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh, win_len, stime=None, etime=None, win_frac=0.05, coordsys='xy', outfolder=None, movie=True, savemovieimg=False, plottype='slowaz', showplots=True, saveplots=False, plotlabel=''):
+def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh,
+                   win_len, stime=None, etime=None, win_frac=0.05, coordsys='xy',
+                   outfolder=None, movie=True, savemovieimg=False, plottype='slowaz',
+                   showplots=True, saveplots=False, plotlabel='', saveall=False,
+                   timestamp='centered'):
     """
     MAKE CHOICE TO USE Sx Sy or S A in PLOTTING
     plotype = 'slowaz' or 'wavenum'
     NEED ffmpeg for movie making to work, otherwise will just get the images
+    timestamp (str): 'centered', the time stamp will be at the middle of the
+        time window, 'left', the time stampe will be at the beginning of the 
+        time window
     """
     if outfolder is None:
         outfolder = os.getcwd()
@@ -256,13 +264,26 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh, win
         """Example function to use with `store` kwarg in
         :func:`~obspy.signal.array_analysis.array_processing`.
         """
-        np.savez(outfolder+'/pow_map_%d.npz' % i, pow_map)
+        np.savez(os.path.join(outfolder, 'pow_map_%d.npz' % i), pow_map)
+        np.savez(os.path.join(outfolder, 'apow_map_%d.npz' % i), apow_map)
+
+    rates = [tr.stats.sampling_rate for tr in st]
+    sampling_rate = unique_list(rates)
+    if len(sampling_rate) > 1:
+        raise Exception('all traces in st must have the same sampling rate')
+    else:
+        sampling_rate = sampling_rate[0]
+    lens = [len(tr) for tr in st]
+    lens = unique_list(lens)
+    if len(lens) > 1:
+        raise Exception('all traces in st must have the same number of samples')
 
     if stime is None:
-        stime = st[0].stats.starttime
+        stime = np.max([tr.stats.starttime for tr in st])
     if etime is None:
-        etime = st[0].stats.endtime
-    if movie:
+        etime = np.min([tr.stats.endtime for tr in st])
+    
+    if movie or saveall:
         store = dump
     else:
         store = None
@@ -285,69 +306,70 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh, win
     t, rel_power, abs_power, baz, slow = out.T
     baz[baz < 0.0] += 360
 
-    # Plot 1
-    labels = ['rel.power', 'abs.power', 'baz', 'slow']
-
-    xlocator = mdates.AutoDateLocator()
-    fig1 = plt.figure()
-    for i, lab in enumerate(labels):
-        ax = fig1.add_subplot(4, 1, i + 1)
-        ax.scatter(out[:, 0], out[:, i + 1], c=out[:, 1], alpha=0.6,
-                   edgecolors='none')
-        ax.set_ylabel(lab)
-        ax.set_xlim(out[0, 0], out[-1, 0])
-        ax.set_ylim(out[:, i + 1].min(), out[:, i + 1].max())
-        ax.xaxis.set_major_locator(xlocator)
-        ax.xaxis.set_major_formatter(mdates.AutoDateFormatter(xlocator))
-
-    fig1.autofmt_xdate()
-    fig1.subplots_adjust(left=0.15, top=0.95, right=0.95, bottom=0.2, hspace=0)
-
-    # Plot 2
-
-    cmap = cm.hot_r
-
-    # choose number of fractions in plot (desirably 360 degree/N is an integer!)
-    N = 36
-    N2 = 30
-    abins = np.arange(N + 1) * 360. / N
-    sbins = np.linspace(0, np.sqrt(slm_x**2 + slm_y**2), N2 + 1)
-
-    # sum rel power in bins given by abins and sbins
-    hist, baz_edges, sl_edges = np.histogram2d(baz, slow, bins=[abins, sbins], weights=rel_power)
-
-    # transform to radian
-    baz_edges = np.radians(baz_edges)
-
-    # add polar and colorbar axes
-    fig2 = plt.figure(figsize=(8, 8))
-    cax = fig2.add_axes([0.85, 0.2, 0.05, 0.5])
-    ax = fig2.add_axes([0.10, 0.1, 0.70, 0.7], polar=True)
-    ax.set_theta_direction(-1)
-    ax.set_theta_zero_location('N')
-
-    dh = abs(sl_edges[1] - sl_edges[0])
-    dw = abs(baz_edges[1] - baz_edges[0])
-
-    # circle through backazimuth
-    for i, row in enumerate(hist):
-        bars = ax.bar(left=(i * dw) * np.ones(N2),
-                      height=dh * np.ones(N2),
-                      width=dw, bottom=dh * np.arange(N2), color=cmap(row / hist.max()))
-
-    ax.set_xticks(np.linspace(0, 2 * np.pi, np.sqrt(slm_x**2 + slm_y**2), endpoint=False))
-    ax.set_xticklabels(['N', 'E', 'S', 'W'])
-
-    # set slowness limits
-    ax.set_ylim(0, np.sqrt(slm_x**2 + slm_y**2))
-    [i.set_color('grey') for i in ax.get_yticklabels()]
-    ColorbarBase(cax, cmap=cmap, norm=Normalize(vmin=hist.min(), vmax=hist.max()))
-
-    if showplots is True:
-        plt.show()
-    if saveplots is True:
-        fig1.savefig('%s/%s-%s.png' % (outfolder, 'timeplot', plotlabel))
-        fig2.savefig('%s/%s-%s.png' % (outfolder, 'overallplot', plotlabel))
+    if saveplots or showplots:
+        # Plot 1
+        labels = ['rel.power', 'abs.power', 'baz', 'slow']
+    
+        xlocator = mdates.AutoDateLocator()
+        fig1 = plt.figure()
+        for i, lab in enumerate(labels):
+            ax = fig1.add_subplot(4, 1, i + 1)
+            ax.scatter(out[:, 0], out[:, i + 1], c=out[:, 1], alpha=0.6,
+                       edgecolors='none')
+            ax.set_ylabel(lab)
+            ax.set_xlim(out[0, 0], out[-1, 0])
+            ax.set_ylim(out[:, i + 1].min(), out[:, i + 1].max())
+            ax.xaxis.set_major_locator(xlocator)
+            ax.xaxis.set_major_formatter(mdates.AutoDateFormatter(xlocator))
+    
+        fig1.autofmt_xdate()
+        fig1.subplots_adjust(left=0.15, top=0.95, right=0.95, bottom=0.2, hspace=0)
+    
+        # Plot 2
+    
+        cmap = cm.hot_r
+    
+        # choose number of fractions in plot (desirably 360 degree/N is an integer!)
+        N = 36
+        N2 = 30
+        abins = np.arange(N + 1) * 360. / N
+        sbins = np.linspace(0, np.sqrt(slm_x**2 + slm_y**2), N2 + 1)
+    
+        # sum rel power in bins given by abins and sbins
+        hist, baz_edges, sl_edges = np.histogram2d(baz, slow, bins=[abins, sbins], weights=rel_power)
+    
+        # transform to radian
+        baz_edges = np.radians(baz_edges)
+    
+        # add polar and colorbar axes
+        fig2 = plt.figure(figsize=(8, 8))
+        cax = fig2.add_axes([0.85, 0.2, 0.05, 0.5])
+        ax = fig2.add_axes([0.10, 0.1, 0.70, 0.7], polar=True)
+        ax.set_theta_direction(-1)
+        ax.set_theta_zero_location('N')
+    
+        dh = abs(sl_edges[1] - sl_edges[0])
+        dw = abs(baz_edges[1] - baz_edges[0])
+    
+        # circle through backazimuth
+        for i, row in enumerate(hist):
+            bars = ax.bar(left=(i * dw) * np.ones(N2),
+                          height=dh * np.ones(N2),
+                          width=dw, bottom=dh * np.arange(N2), color=cmap(row / hist.max()))
+    
+        ax.set_xticks(np.linspace(0, 2 * np.pi, np.sqrt(slm_x**2 + slm_y**2), endpoint=False))
+        ax.set_xticklabels(['N', 'E', 'S', 'W'])
+    
+        # set slowness limits
+        ax.set_ylim(0, np.sqrt(slm_x**2 + slm_y**2))
+        [i.set_color('grey') for i in ax.get_yticklabels()]
+        ColorbarBase(cax, cmap=cmap, norm=Normalize(vmin=hist.min(), vmax=hist.max()))
+    
+        if showplots:
+            plt.show()
+        if saveplots:
+            fig1.savefig('%s/%s-%s.png' % (outfolder, 'timeplot', plotlabel))
+            fig2.savefig('%s/%s-%s.png' % (outfolder, 'overallplot', plotlabel))
 
     if movie:
         cmap = cm.RdYlBu
@@ -425,15 +447,21 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh, win
         os.chdir(outfolder)
         os.system('ffmpeg -f image2 -start_number 0 -r 4 -i img%03d.png -y -c:v libx264 -vf "format=yuv420p" beammovie.mp4')
         # Clean up
-        delfiles = glob.glob(outfolder+'/pow_map_*.npz')
-        for df in delfiles:
-            os.remove(df)
-        if savemovieimg is False:
-            delfiles = glob.glob(outfolder+'/img*png')
+        delfiles = glob.glob(os.path.join(outfolder, 'pow_map_*.npz'))
+        if not saveall:
             for df in delfiles:
                 os.remove(df)
+            if savemovieimg is False:
+                delfiles = glob.glob(os.path.join(outfolder, 'img*png'))
+                for df in delfiles:
+                    os.remove(df)
         os.chdir(origdir)
-
+    
+    # shift timestamp if necessary (obspy puts it at the beginning of the window)
+    if timestamp == 'centered':
+        numsecindays = win_len/(24.*60*60)
+        t = t + numsecindays
+    
     return t, rel_power, abs_power, baz, slow
 
 
@@ -551,7 +579,9 @@ def backproject(st, v, tshifts, freqmin, freqmax, winlen, overlap, gridx, gridy,
     return power, meanpow, tvec, fvec
 
 
-def beamform_spherical(st, slim, sstep, freqlow, freqhigh, win_len, minbeampow, percdiv, stepdiv, Dmin, Dmax, Dstep, stime=None, etime=None, win_frac=0.05, outfolder=None, coordsys='xy', verbose=False):
+def Almendros(st, win_len, Smin, Smax, Sstep, Amin, Amax, Astep, Dmin, Dmax,
+              Dstep, stime=None, etime=None, win_frac=0.05,
+              outfolder=None, coordsys='xy', verbose=False):
     """
     Uses plane wave beamforming to approximate answer, then searches in finer grid around answer from that for spherical wave best solution
     Almendros et al 1999 methods

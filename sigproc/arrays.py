@@ -3,7 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import sigproc
-from obspy.signal.array_analysis import array_transff_freqslowness, array_transff_wavenumber, array_processing, get_geometry, get_timeshift, get_spoint
+from obspy.signal.array_analysis import array_transff_freqslowness, array_transff_wavenumber, array_processing, get_geometry, get_timeshift, get_spoint, get_geometry
 from obspy.signal.util import util_geo_km, next_pow_2
 from obspy import UTCDateTime, Stream
 from obspy.signal.headers import clibsignal
@@ -579,51 +579,63 @@ def backproject(st, v, tshifts, freqmin, freqmax, winlen, overlap, gridx, gridy,
     return power, meanpow, tvec, fvec
 
 
-def Almendros(st, win_len, Smin, Smax, Sstep, Amin, Amax, Astep, Dmin, Dmax,
-              Dstep, stime=None, etime=None, win_frac=0.05,
-              outfolder=None, coordsys='xy', verbose=False):
-    """
-    Uses plane wave beamforming to approximate answer, then searches in finer grid around answer from that for spherical wave best solution
-    Almendros et al 1999 methods
+def Almendros_beam(st, win_len, Smin, Smax, Sstep, Amin, Amax, Astep, spherical=False,
+                   Rmin=None, Rmax=None, Rstep=None, stime=None, etime=None, overlap=0.8,
+                   outfolder=None, subsample=True):
+    """Plane and spherical wavefront beamforming using approch of Almendros et al 1999
+    
+    uses cross correlation in time domain instead of frequency domain as
+    fk beamforming does, this allows for smaller time windows to be used
+
+    st: obspy stream of array data with station coordinates attached in
+        cartesian coords, km units (not latlon)
+    win_len: window length in seconds
+    Smin: minimum slowness (s/km)
+    Smax: maximum slowness (s/km)
+    Sstep: slowness step (s/km)
+    Amin: minimum azimuth (degrees)
+    Amax: maximum azimuth (degrees)
+    Astep: azimuth step (degrees)
+    Dmin: 
+
+        
+    subsample (bool): if True, will shift timing with subsample accuracy
+        by using linear interpolation (may slow things down)
     """
     if outfolder is None:
         outfolder = os.getcwd()
+    starttime, endtime, sampling_rate, numsamp = checksync(st)
+    numsta = len(st)
+    slows = np.linspace(Smin, Smax, Sstep)
+    baz = np.linspace(Amin, Amax, Astep)
 
-    def dump(pow_map, apow_map, i):
-        """Example function to use with `store` kwarg in
-        :func:`~obspy.signal.array_analysis.array_processing`.
-        """
-        np.savez(outfolder+'/pow_map_%d.npz' % i, pow_map)
+    geometry = get_geometry(st, coordsys='xy')  # returns matrix of x,y,z, each row corresponds to each station in st, relative to center of array (0,0,0)
+    tsb = timeshifts(geometry, baz, slows)
 
-    if stime is None:
-        stime = st[0].stats.starttime
-    if etime is None:
-        etime = st[0].stats.endtime
+    alldata = np.vstack([trace.data for trace in st])
 
-    kwargs = dict(
-        # slowness grid: X min, X max, Y min, Y max, Slow Step
-        sll_x=-slim, slm_x=slim, sll_y=-slim, slm_y=slim, sl_s=sstep,
-        # sliding window properties
-        win_len=win_len, win_frac=win_frac,
-        # frequency properties
-        frqlow=freqlow, frqhigh=freqhigh, prewhiten=0,
-        # restrict output
-        semb_thres=-1e9, vel_thres=-1e9,
-        stime=stime,
-        etime=etime, coordsys=coordsys, store=None)
+    beams = np.zeros(len(baz), (len(slows), numsamp))
 
-    t, rel_power, abs_power, baz, slow = array_processing(st, **kwargs)
+    # iterate over slownesses
+    for j in range(len(baz)):
+        for k in range(len(slows)):
+            temp = np.zeros(np.shape(alldata))
+            # get shifts for this slowness in number of samples
+            shifts = tsb[:, j, k] * sampling_rate
+            if subsample: # interpolate in shift for subsample accuracy
+                for i in range(numsta):
+                    tv = np.arange(0., numsamp)
+                    temp[i, :] = np.interp(tv - shifts[i], tv, alldata[i, :])
+            else: # otherwise round to nearest sample
+                shifts = np.round(shifts)
+                for i in range(numsta):
+                    temp[i, :] = np.roll(alldata[i, :], int(shifts[i]))
+            # Compute zero-lag cross correlation over entire matrix
+            STARTHERE
+            fullmat = 1./numsta**2 * alldata*temp/(np.sqrt())
+            
+            
 
-    # Will need this for next step
-    geometry = get_geometry(st, coordsys=coordsys)
-
-    # Initiate zero result matrix for entire possible area (sparse?) - Will be
-
-    # Generate time shift table for entire area for all stations (This would be 4D)
-
-    # Filter seismograms to freqlims
-
-    # Pull out just the data from the stream into an array
 
     for i, t1 in enumerate(t):
         pass
@@ -651,4 +663,170 @@ def Almendros(st, win_len, Smin, Smax, Sstep, Amin, Amax, Astep, Dmin, Dmax,
         # Uncertainties?
 
 
+def Slant_stack(st, baz, slows, root=0., coordsys='xy', subsample=True, plot=True, vmin=0.):
+    """Vespa process slant stacks, as described in Rost and Thomas (2002)
+    st: obspy stream of array data with station coordinates attached
+    baz: float or array-like list of floats of backazimuth, if a single float,
+        will compute vespagram of slowness for fixed azimuth. If baz is an
+        array of values, slowness must be a single float and vice versa.
+    slows: float or array-like list of evenly spaced floats of slowness to compute. If a
+        single float, will compute vespagram of azimuth for fixed slowness
+    root (float): nth root stacking, if n=0, this is a vespagram
+    coordsys (str): coordinate system of coordinates of st ('xy' or 'lonlat')
+    subsample (bool): if True, will shift timing with subsample accuracy
+        by using linear interpolation
+    """
+    starttime, endtime, sampling_rate, numsamp = checksync(st)
+    numsta = len(st)
+    
+    if isinstance(baz, float):
+        fixaz = True
+    else:
+        fixaz = False
+    if isinstance(slows, float):
+        fixslow = True
+    else:
+        fixslow = False
+    if not fixaz and not fixslow:
+        raise Exception('Must fix either azimuth or slowness')
 
+    geometry = get_geometry(st, coordsys=coordsys)  # returns matrix of x,y,z, each row corresponds to each station in st, relative to center of array (0,0,0)
+    tsb = timeshifts(geometry, baz, slows)
+    alldata = np.vstack([trace.data for trace in st])
+    
+    if fixaz:
+        vesp = np.zeros((len(slows), numsamp))
+        # iterate over slownesses
+        for k in range(len(slows)):
+            temp = np.zeros(numsamp)
+            # get shifts for this slowness in number of samples
+            shifts = tsb[:, 0, k] * sampling_rate
+            if subsample: # interpolate in shift for subsample accuracy
+                for i in range(numsta):
+                    tv = np.arange(0., numsamp)
+                    if root == 0.: # subtract for subsample add for roll because shifting xaxis right is equivalent to rolling vector back
+                        temp += 1./numsta * np.interp(tv - shifts[i], tv, alldata[i, :])
+                    else:
+                        temp += 1./numsta * np.abs(np.interp(tv - shifts[i], tv, alldata[i, :]))**(1./root) * np.sign(alldata[i, :])
+                if root > 0.:
+                    temp = np.abs(temp)**root * np.sign(temp)  # take to Nth root and preserve sign
+
+            else: # otherwise round to nearest sample
+                shifts = np.round(shifts)
+                for i in range(numsta):
+                    if root == 0.:
+                        temp += 1./numsta * np.roll(alldata[i, :], int(shifts[i]))
+                    else:
+                        temp += 1./numsta * np.abs(np.roll(alldata[i, :], int(shifts[i])))**(1./root) * np.sign(alldata[i, :])
+                if root > 0.:
+                    temp = np.abs(temp)**root * np.sign(temp)  # take to Nth root and preserve sign
+            vesp[k, :] = temp.copy()
+
+    if fixslow:
+        vesp = np.zeros((len(baz), numsamp))
+        # iterate over azimuths
+        for k in range(len(baz)):
+            temp = np.zeros(numsamp)
+            # get shifts for this slowness in number of samples
+            shifts = tsb[:, k, 0] * sampling_rate
+            if subsample: # interpolate in shift for subsample accuracy
+                for i in range(numsta):
+                    tv = np.arange(0., numsamp)
+                    if root == 0.: # subtract for subsample add for roll because shifting xaxis right is equivalent to rolling vector back
+                        temp += 1./numsta * np.interp(tv - shifts[i], tv, alldata[i, :])
+                    else:
+                        temp += 1./numsta * np.abs(np.interp(tv - shifts[i], tv, alldata[i, :]))**(1./root) * np.sign(alldata[i, :])
+                if root > 0.:
+                    temp = np.abs(temp)**root * np.sign(temp)  # take to Nth root and preserve sign
+
+            else: # otherwise round to nearest sample
+                shifts = np.round(shifts)
+                for i in range(numsta):
+                    if root == 0.:
+                        temp += 1./numsta * np.roll(alldata[i, :], int(shifts[i]))
+                    else:
+                        temp += 1./numsta * np.abs(np.roll(alldata[i, :], int(shifts[i])))**(1./root) * np.sign(alldata[i, :])
+                if root > 0.:
+                    temp = np.abs(temp)**root * np.sign(temp)  # take to Nth root and preserve sign
+            vesp[k, :] = temp.copy()
+        
+    if plot:
+        fig = plt.figure(figsize=(13, 6))
+        ax1 = fig.add_subplot(111)
+        if fixaz:
+            extent = (0., endtime-starttime, np.min(slows), np.max(slows)) # xmin, xmax, ymin, ymax of corners of image (not center of pixel)
+        if fixslow:
+            extent = (0., endtime-starttime, np.min(baz), np.max(baz))
+        ax1.imshow(vesp, extent=extent, aspect='auto', vmin=vmin, cmap=cm.gist_heat_r)
+        #labels = ax1.get_yticks()
+        #labels = ['%0.2f' % (1./lab) for lab in labels]
+        #ax1.set_xticklabels(labels)
+        #ax1.set_ylabel('Velocity (km/s)')
+        if fixaz:
+            ax1.set_ylabel('Slowness (s/km)')
+        if fixslow:
+            ax1.set_ylabel('Back azimuth (degrees)')
+        ax1.set_xlabel('Time (sec)')
+        #fig.colorbar(ax1)
+        plt.show()
+
+    return vesp
+
+
+def timeshifts(geometry, baz, slows):
+    """Similar to obspy's get_timeshift but does not require equal spacing of gripts
+    geometry: output from obspy's get_geometry()
+    baz: list of backazimuths in degrees
+    slows: list or array of slownesses in s/km
+    """
+    if isinstance(baz, float):
+        baz = [baz]
+    if isinstance(slows, float):
+        slows = [slows]
+    numaz = len(baz)
+    numslow = len(slows)
+    # unoptimized version for reference
+    nstat = len(geometry)  # last index are center coordinates
+    
+    time_shift_tbl = np.empty((nstat, numaz, numslow), dtype=np.float32)
+    for k in xrange(numaz):
+        bazkr = math.radians(baz[k])
+        for l in xrange(numslow):
+            slowl = slows[l]
+            # azimuth from center to station k,l (in radians)
+            sx = slowl * math.sin(bazkr)
+            sy = slowl * math.cos(bazkr)
+            time_shift_tbl[:,k,l] = sx * geometry[:, 0] + sy * geometry[:,1]
+    return time_shift_tbl
+  
+
+def checksync(st, resample=False):
+    """Check if all traces in st are synced, if so, return basic info
+    
+    """
+    samprates = [trace.stats.sampling_rate for trace in st]
+    if np.mean(samprates) != samprates[0]:
+        if resample:
+            print('sample rates are not all equal, resampling to lowest sample rate')
+            st.resample(np.min(samprates))
+        else:
+            raise Exception('Sample rates of stream object are not all equal')
+    
+    stdiff = [st[0].stats.starttime-trace.stats.starttime for trace in st]
+    if np.mean(stdiff) != 0.:
+        raise Exception('Start times are not uniform')
+
+    stdiff = [st[0].stats.endtime-trace.stats.endtime for trace in st]
+    if np.mean(stdiff) != 0.:
+        raise Exception('End times are not uniform')
+        
+    lendiff = [len(st[0])-len(trace) for trace in st]
+    if np.mean(lendiff) != 0.:
+        raise Exception('Lengths are not equal')
+    
+    starttime = st[0].stats.starttime
+    endtime = st[0].stats.endtime
+    sampling_rate = st[0].stats.sampling_rate
+    numsamp = len(st[0])
+
+    return starttime, endtime, sampling_rate, numsamp

@@ -3,7 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import sigproc
-from obspy.signal.array_analysis import array_transff_freqslowness, array_transff_wavenumber, array_processing, get_geometry, get_timeshift, get_spoint, get_geometry
+import obspy.signal.array_analysis as aa  # array_transff_freqslowness, array_transff_wavenumber, array_processing, get_geometry, get_timeshift, get_spoint, get_geometry
 from obspy.signal.util import util_geo_km, next_pow_2
 from obspy import UTCDateTime, Stream
 from obspy.signal.headers import clibsignal
@@ -16,6 +16,10 @@ import glob
 import os
 from scipy.fftpack import fft, ifft, ifftshift
 from reviewData.reviewData import unique_list
+import tempfile
+import shutil
+import matplotlib.colors as colors
+from obspy.signal.invsim import cosine_taper
 
 
 def correlation_analysis(st, flow, fhigh, plotfit=True, plotdots=True):
@@ -46,9 +50,11 @@ def correlation_analysis(st, flow, fhigh, plotfit=True, plotdots=True):
     lagsec = distkm.copy()
     col = 0
     labels = []
-    fig = plt.figure()
+    fig = plt.figure(figsize=(14., 8.))
     ax = fig.add_subplot(211)
     ax1 = fig.add_subplot(212)
+    vmin = np.min(flow)
+    vmax = np.max(flow)
 
     for fmin, fmax in zip(flow, fhigh):
         stfilt = st.copy()
@@ -65,8 +71,8 @@ def correlation_analysis(st, flow, fhigh, plotfit=True, plotdots=True):
                 lagsec[row, col] = np.abs(maxdt)
                 row += 1
         if plotdots:
-            ax.plot(distkm[:, col], corr[:, col], '.', label=labels[col])
-            ax1.plot(distkm[:, col], lagsec[:, col], '.', label=labels[col])
+            ax.scatter(distkm[:, col], corr[:, col], c=np.ones(len(distkm))*fmin, label=labels[col], vmin=vmin, vmax=vmax)
+            ax1.scatter(distkm[:, col], lagsec[:, col], c=np.ones(len(distkm))*fmin, label=labels[col], vmin=vmin, vmax=vmax)
         if plotfit:
             p = np.polyfit(distkm[:, col], corr[:, col], 1)
             z = np.poly1d(p)
@@ -77,7 +83,17 @@ def correlation_analysis(st, flow, fhigh, plotfit=True, plotdots=True):
             ax1.plot(dists, z1(dists), label=labels[col])
         col += 1
 
-    ax.legend(fontsize=8)
+    if plotdots:
+        # Add colorbar
+        ax_legend = fig.add_axes([0.6, 0.95, 0.25, 0.02])
+        cNorm = colors.Normalize(vmin=vmin, vmax=vmax)
+        ticks = np.linspace(vmin, vmax, 5)
+        ticklabels = ['%0.2f' % tick for tick in ticks]
+        ColorbarBase(ax_legend, norm=cNorm, ticks=ticks,
+                     orientation='horizontal', label='Minimum Frequency')
+        ax_legend.xaxis.set_ticklabels(ticklabels)
+    else:
+        ax.legend(fontsize=8)
     ax.set_ylabel('Xcorr')
     ax1.set_xlabel('Distance (km)')
     ax1.set_ylabel('Lag (sec)')
@@ -125,7 +141,7 @@ def plotarray(stcoord, inunits='m', plotunits='km', sourcecoords=None, stalabels
     coords = []
     tempcoords = []
 
-    if type(stcoord) is Stream:
+    if isinstance(stcoord, Stream):
         if stalabels is None:
             stalabels = []
         for trace in stcoord:
@@ -197,7 +213,7 @@ def plotARF_slowaz(coords, slim, sstep, freqlow, freqhigh, fstep, coordsys='xy')
     """
     Add ability to plot range of frequency ranges
     """
-    transff = array_transff_freqslowness(coords, slim, sstep, freqlow, freqhigh, fstep, coordsys=coordsys)
+    transff = aa.array_transff_freqslowness(coords, slim, sstep, freqlow, freqhigh, fstep, coordsys=coordsys)
     xgrid = np.arange(-slim, slim+sstep, sstep)
     slow = np.empty((len(xgrid), len(xgrid)))
     baz = slow.copy()
@@ -226,10 +242,11 @@ def plotARF_slowaz(coords, slim, sstep, freqlow, freqhigh, fstep, coordsys='xy')
     fig.suptitle('Array response function')
     ColorbarBase(cax, cmap=cmap, norm=Normalize(vmin=0., vmax=1.))
     plt.show()
+    return fig, ax
 
 
 def plotARF_k(coords, klim, kstep, coordsys='xy'):
-    transff = array_transff_wavenumber(coords, klim, kstep, coordsys=coordsys)
+    transff = aa.array_transff_wavenumber(coords, klim, kstep, coordsys=coordsys)
     xgrid = np.arange(-klim, klim+kstep, kstep)
     cmap = cm.RdYlBu
     fig = plt.figure(figsize=(8, 8))
@@ -247,25 +264,38 @@ def plotARF_k(coords, klim, kstep, coordsys='xy'):
 def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh,
                    win_len, stime=None, etime=None, win_frac=0.05, coordsys='xy',
                    outfolder=None, movie=True, savemovieimg=False, plottype='slowaz',
-                   showplots=True, saveplots=False, plotlabel='', saveall=False,
+                   showplots=True, saveplots=False, plotlabel='', saveall=True,
                    timestamp='centered'):
     """
     MAKE CHOICE TO USE Sx Sy or S A in PLOTTING
     plotype = 'slowaz' or 'wavenum'
     NEED ffmpeg for movie making to work, otherwise will just get the images
     timestamp (str): 'centered', the time stamp will be at the middle of the
-        time window, 'left', the time stampe will be at the beginning of the 
+        time window, 'left', the time stampe will be at the beginning of the
         time window
+
+    Returns:
+        t: vector of time stamps, if timestamp='centered', at the center of each window, otherwise,
+            the time of the start of each window where the relative power was above a the threshold
+            of -1e9.
+        rel_power: relative power (0 to 1) of the peak beam for each time window in t
+        abs_power: absolute power of the peak beam for each time window
+        baz: backazimuth, in degrees, of the peak beam
+        slow: slowness, in s/km, of the peak beam
+        relslowspec: 3D matrix containing full slowness spectra (relative power) for each time window
+        aslowspec: 3D matrix containing full slowness spectra (abs power) for each time window
     """
     if outfolder is None:
         outfolder = os.getcwd()
+
+    tempdir = tempfile.mkdtemp()
 
     def dump(pow_map, apow_map, i):
         """Example function to use with `store` kwarg in
         :func:`~obspy.signal.array_analysis.array_processing`.
         """
-        np.savez(os.path.join(outfolder, 'pow_map_%d.npz' % i), pow_map)
-        np.savez(os.path.join(outfolder, 'apow_map_%d.npz' % i), apow_map)
+        np.savez(os.path.join(tempdir, 'pow_map_%d.npz' % i), pow_map)
+        np.savez(os.path.join(tempdir, 'apow_map_%d.npz' % i), apow_map)
 
     rates = [tr.stats.sampling_rate for tr in st]
     sampling_rate = unique_list(rates)
@@ -282,7 +312,7 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh,
         stime = np.max([tr.stats.starttime for tr in st])
     if etime is None:
         etime = np.min([tr.stats.endtime for tr in st])
-    
+
     if movie or saveall:
         store = dump
     else:
@@ -302,6 +332,40 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh,
 
     out = array_processing(st, **kwargs)
 
+    if movie or saveall:
+        xgrid = np.arange(sll_x, slm_x+sstep, sstep)
+        ygrid = np.arange(sll_y, slm_y+sstep, sstep)
+
+        # # initialize matrix to hold slowness spectra
+        # if sll_x <= 0. and slm_x <= 0.:
+        #     xgrid = np.linspace(sll_x, slm_x, np.ceil((-sll_x+slm_x)/sstep) + 1, endpoint=True)
+        # else:
+        #     xgrid = np.arange(sll_x, slm_x+sstep, sstep)
+        # if sll_y <= 0. and slm_y <= 0.:
+        #     ygrid = np.linspace(sll_y, slm_y, np.ceil((-sll_y+slm_y)/sstep) + 1, endpoint=True)
+        # else:
+        #     ygrid = np.linspace(sll_y, slm_y, np.ceil((-sll_y+slm_y)/sstep), endpoint=True)
+
+        # get all files from tempdir
+        findinds = glob.glob(os.path.join(tempdir, 'pow_map_*.npz'))
+        findinds = [int(find1.split('.')[0].split('_')[-1]) for find1 in findinds]
+        findinds.sort()
+        aslowspec = np.zeros((len(xgrid), len(ygrid), len(findinds)))
+        relslowspec = aslowspec.copy()
+        for i in range(len(findinds)):
+            filen = glob.glob(os.path.join(tempdir, 'pow_map_%i.npz' % findinds[i]))
+            with np.load(filen[0]) as f:
+                relslowspec[:, :, i] = f['arr_0']
+            filen = glob.glob(os.path.join(tempdir, 'apow_map_%i.npz' % findinds[i]))
+            with np.load(filen[0]) as f:
+                aslowspec[:, :, i] = f['arr_0']
+        # remove temporary files
+        shutil.rmtree(tempdir)
+
+    else:
+        relslowspec = None
+        aslowspec = None
+
     # make output human readable, adjust backazimuth to values between 0 and 360
     t, rel_power, abs_power, baz, slow = out.T
     baz[baz < 0.0] += 360
@@ -309,7 +373,7 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh,
     if saveplots or showplots:
         # Plot 1
         labels = ['rel.power', 'abs.power', 'baz', 'slow']
-    
+
         xlocator = mdates.AutoDateLocator()
         fig1 = plt.figure()
         for i, lab in enumerate(labels):
@@ -321,50 +385,49 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh,
             ax.set_ylim(out[:, i + 1].min(), out[:, i + 1].max())
             ax.xaxis.set_major_locator(xlocator)
             ax.xaxis.set_major_formatter(mdates.AutoDateFormatter(xlocator))
-    
+
         fig1.autofmt_xdate()
         fig1.subplots_adjust(left=0.15, top=0.95, right=0.95, bottom=0.2, hspace=0)
-    
+
         # Plot 2
-    
+
         cmap = cm.hot_r
-    
+
         # choose number of fractions in plot (desirably 360 degree/N is an integer!)
         N = 36
         N2 = 30
         abins = np.arange(N + 1) * 360. / N
         sbins = np.linspace(0, np.sqrt(slm_x**2 + slm_y**2), N2 + 1)
-    
+
         # sum rel power in bins given by abins and sbins
         hist, baz_edges, sl_edges = np.histogram2d(baz, slow, bins=[abins, sbins], weights=rel_power)
-    
+
         # transform to radian
         baz_edges = np.radians(baz_edges)
-    
+
         # add polar and colorbar axes
         fig2 = plt.figure(figsize=(8, 8))
         cax = fig2.add_axes([0.85, 0.2, 0.05, 0.5])
         ax = fig2.add_axes([0.10, 0.1, 0.70, 0.7], polar=True)
         ax.set_theta_direction(-1)
         ax.set_theta_zero_location('N')
-    
+
         dh = abs(sl_edges[1] - sl_edges[0])
         dw = abs(baz_edges[1] - baz_edges[0])
-    
+
         # circle through backazimuth
         for i, row in enumerate(hist):
-            bars = ax.bar(left=(i * dw) * np.ones(N2),
-                          height=dh * np.ones(N2),
-                          width=dw, bottom=dh * np.arange(N2), color=cmap(row / hist.max()))
-    
+            ax.bar(left=(i * dw) * np.ones(N2), height=dh * np.ones(N2), width=dw,
+                   bottom=dh * np.arange(N2), color=cmap(row / hist.max()))
+
         ax.set_xticks(np.linspace(0, 2 * np.pi, np.sqrt(slm_x**2 + slm_y**2), endpoint=False))
         ax.set_xticklabels(['N', 'E', 'S', 'W'])
-    
+
         # set slowness limits
         ax.set_ylim(0, np.sqrt(slm_x**2 + slm_y**2))
         [i.set_color('grey') for i in ax.get_yticklabels()]
         ColorbarBase(cax, cmap=cmap, norm=Normalize(vmin=hist.min(), vmax=hist.max()))
-    
+
         if showplots:
             plt.show()
         if saveplots:
@@ -401,9 +464,7 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh,
         stfilt.trim(stime-5., etime+5., pad=True, fill_value=0.)
 
         for i, t1 in enumerate(t):
-            filen = glob.glob(outfolder+'/pow_map_%i.npz' % findind)
-            f = np.load(filen[0])
-            pow_map = f['arr_0']
+            pow_map = relslowspec[:, :, i]
             fig = plt.figure(figsize=(18, 6))
             ax = fig.add_axes([0.05, 0.05, 0.25, 0.9], polar=True)
             ax.pcolormesh(baz2, slow2, pow_map, vmin=0., vmax=1., cmap=cmap)
@@ -456,13 +517,13 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh,
                 for df in delfiles:
                     os.remove(df)
         os.chdir(origdir)
-    
+
     # shift timestamp if necessary (obspy puts it at the beginning of the window)
     if timestamp == 'centered':
         numsecindays = win_len/(24.*60*60)
         t = t + numsecindays
-    
-    return t, rel_power, abs_power, baz, slow
+
+    return t, rel_power, abs_power, baz, slow, relslowspec, aslowspec
 
 
 def backproject(st, v, tshifts, freqmin, freqmax, winlen, overlap, gridx, gridy, gridz=None, starttime=None, endtime=None, relshift=0., coords=None, ds=False):
@@ -579,12 +640,13 @@ def backproject(st, v, tshifts, freqmin, freqmax, winlen, overlap, gridx, gridy,
     return power, meanpow, tvec, fvec
 
 
-def Almendros_beam(st, win_len, Smin, Smax, Sstep, Amin, Amax, Astep, spherical=False,
-                   Rmin=None, Rmax=None, Rstep=None, stime=None, etime=None, overlap=0.8,
-                   outfolder=None, subsample=True):
-    """Plane and spherical wavefront beamforming using approch of Almendros et al 1999
-    
-    uses cross correlation in time domain instead of frequency domain as
+def beamform_timedomain(st, win_len, Smin, Smax, Sstep, Amin, Amax, Astep, spherical=False,
+                        Rmin=None, Rmax=None, Rstep=None, overlap=0.8, outfolder=None,
+                        subsample=True, error_threshold=0.9, spher_perc=0.9, crosscorr=True,
+                        spher_bazwid=20., spher_slowwid=0.5, spher_subdiv=20.):
+    """Plane and spherical wavefront beamforming using approch of Almendros et al. 1999
+
+    Uses cross correlation in time domain instead of frequency domain as
     fk beamforming does, this allows for smaller time windows to be used
 
     st: obspy stream of array data with station coordinates attached in
@@ -596,9 +658,12 @@ def Almendros_beam(st, win_len, Smin, Smax, Sstep, Amin, Amax, Astep, spherical=
     Amin: minimum azimuth (degrees)
     Amax: maximum azimuth (degrees)
     Astep: azimuth step (degrees)
-    Dmin: 
-
-        
+    spherical (bool): if False (default), assumes plane waves, if True, will search over radii
+    Rmin: minimum distance (km)
+    Rmax: maximum distance (km)
+    Rstep: distance step (km)
+    overlap: overlap (proportional) of windows
+    outfolder: Location to save figures?
     subsample (bool): if True, will shift timing with subsample accuracy
         by using linear interpolation (may slow things down)
     """
@@ -606,61 +671,149 @@ def Almendros_beam(st, win_len, Smin, Smax, Sstep, Amin, Amax, Astep, spherical=
         outfolder = os.getcwd()
     starttime, endtime, sampling_rate, numsamp = checksync(st)
     numsta = len(st)
-    slows = np.linspace(Smin, Smax, Sstep)
-    baz = np.linspace(Amin, Amax, Astep)
+    slows = np.arange(Smin, Smax, Sstep)
+    baz = np.arange(Amin, Amax, Astep)
 
-    geometry = get_geometry(st, coordsys='xy')  # returns matrix of x,y,z, each row corresponds to each station in st, relative to center of array (0,0,0)
+    # Figure out indices of starts of time windows
+    numsamples = int(np.round(sampling_rate * win_len))
+    shiftfwd = int((1.-overlap) * numsamples)
+    indstarts = np.arange(0, numsamp-shiftfwd, shiftfwd)
+    timemids = (indstarts + 0.5*numsamples)/sampling_rate
+
+    geometry = aa.get_geometry(st, coordsys='xy')  # returns matrix of x,y,z, each row corresponds to each station in st, relative to center of array (0,0,0)
     tsb = timeshifts(geometry, baz, slows)
 
     alldata = np.vstack([trace.data for trace in st])
 
-    beams = np.zeros(len(baz), (len(slows), numsamp))
+    R = np.zeros((len(baz), len(slows), len(indstarts)))
 
-    # iterate over slownesses
+    # Grid search
     for j in range(len(baz)):
         for k in range(len(slows)):
             temp = np.zeros(np.shape(alldata))
             # get shifts for this slowness in number of samples
             shifts = tsb[:, j, k] * sampling_rate
-            if subsample: # interpolate in shift for subsample accuracy
+            if subsample:  # interpolate in shift for subsample accuracy
                 for i in range(numsta):
                     tv = np.arange(0., numsamp)
                     temp[i, :] = np.interp(tv - shifts[i], tv, alldata[i, :])
-            else: # otherwise round to nearest sample
+            else:  # otherwise round to nearest sample
                 shifts = np.round(shifts)
                 for i in range(numsta):
                     temp[i, :] = np.roll(alldata[i, :], int(shifts[i]))
-            # Compute zero-lag cross correlation over entire matrix
-            STARTHERE
-            fullmat = 1./numsta**2 * alldata*temp/(np.sqrt())
-            
-            
 
+            # Loop over time windows
+            for i, ind in enumerate(indstarts):
+                if crosscorr:  # Compute zero-lag cross correlation over entire matrix for each pair of stations
+                    tempR = 0.
+                    for m in range(numsta):
+                        for n in range(m + 1, numsta):
+                            Rm0 = np.sum(temp[m, ind:ind+numsamples]**2.)
+                            Rn0 = np.sum(temp[n, ind:ind+numsamples]**2.)
+                            Rmn = np.sum(temp[m, ind:ind+numsamples] * temp[n, ind:ind+numsamples])
+                            tempR += 1./numsta**2 * Rmn/(np.sqrt(Rm0*Rn0))
+                else:  # Compute relative beampower
+                    abspower = np.mean(np.sum(temp[:, ind:ind+numsamples]**2., axis=1))
+                    beam = np.sum(np.mean(temp[:, ind:ind+numsamples], axis=0)**2.)
+                    tempR = beam/abspower
 
-    for i, t1 in enumerate(t):
-        pass
-        # Check if rel_power was high enough
+                # Save the whole thing
+                R[j, k, i] = tempR
 
-        # If it was, define search area for spherical approximation
+    bazpk = np.ones(len(indstarts)) * float('nan')
+    bazrange = np.ones((2, len(indstarts))) * float('nan')
+    slowpk = np.ones(len(indstarts)) * float('nan')
+    xcorrpk = np.zeros(len(indstarts))
+    slowrange = np.ones((2, len(indstarts))) * float('nan')
+    xcorrthresh = np.ones(len(indstarts)) * float('nan')
+    # get peak values out
+    for i in range(len(indstarts)):
+        tempR = R[:, :, i]
+        # Find values around
+        xcorrpk[i] = np.nanmax(tempR)
+        if xcorrpk[i] > 0:
+            row, col = np.unravel_index(np.argmax(tempR, axis=None), tempR.shape)
+            bazpk[i] = baz[row]
+            slowpk[i] = slows[col]
+            xcorrpk[i] = tempR[row, col]
+            xcorrthresh[i] = error_threshold * xcorrpk[i]
+            rows, cols = np.where(tempR > xcorrthresh[i])
+            bazrange[:, i] = [np.min(baz[rows]), np.max(baz[rows])]
+            slowrange[:, i] = [np.min(slows[cols]), np.max(slows[cols])]
 
-        # Save this as a polygon for plotting
-        
-        # Loop over all distances - CAN I DO THIS WITH MATRIX OPERATIONS SOMEHOW?
+    if spherical:
+        #TODO check the time shifts for this, doesn't seem to be working right
+        spher_t = []
+        spher_baz = []
+        spher_slow = []
+        spher_dist = []
+        spher_bazrange = []
+        spher_slowrange = []
+        spher_xcorr = []
+        spher_xcorrthresh = []
 
-            # Loop over all S
+        # Build range of radii etc. to search
+        dists = np.arange(Rmin, Rmax, Rstep)
+        # Get top percentile of results and, redo those windows for spherical wavefronts
+        indxs = np.where(xcorrpk > np.percentile(xcorrpk, 100.*spher_perc))
+        for i in indxs[0]:
+            ind = indstarts[i]
+            # Build grid around plane wave value to search
+            subbaz = np.linspace(bazpk[i]-0.5*spher_bazwid, bazpk[i]-0.5*spher_bazwid, spher_subdiv)
+            subslows = np.linspace(slowpk[i]-0.5*spher_slowwid, slowpk[i]-0.5*spher_slowwid, spher_subdiv)
+            tst2 = timeshifts(geometry, subbaz, subslows, dists)
+            # Grid search
+            Sub = np.zeros((len(subbaz), len(subslows), len(dists)))
+            for j in range(len(subbaz)):
+                for k in range(len(subslows)):
+                    for l in range(len(dists)):
+                        # Get time shifts
+                        temp = np.zeros(np.shape(alldata))
+                        # get shifts for this slowness in number of samples
+                        shifts = tst2[:, j, k, l] * sampling_rate
+                        if subsample:  # interpolate in shift for subsample accuracy
+                            for q in range(numsta):
+                                tv = np.arange(0., numsamp)
+                                temp[q, :] = np.interp(tv - shifts[q], tv, alldata[q, :])
+                        else:  # otherwise round to nearest sample
+                            shifts = np.round(shifts)
+                            for q in range(numsta):
+                                temp[q, :] = np.roll(alldata[q, :], int(shifts[q]))
 
-                # Loop over all A
+                        if crosscorr:
+                            # Compute zero-lag cross correlation over entire matrix for each pair of stations
+                            tempR = 0.
+                            for m in range(numsta):
+                                for n in range(m + 1, numsta):
+                                    Rm0 = np.sum(temp[m, ind:ind+numsamples]**2.)
+                                    Rn0 = np.sum(temp[n, ind:ind+numsamples]**2.)
+                                    Rmn = np.sum(temp[m, ind:ind+numsamples] * temp[n, ind:ind+numsamples])
+                                    tempR += 1./numsta**2 * Rmn/(np.sqrt(Rm0*Rn0))
+                        else:  # Compute relative beampower
+                            abspower = np.mean(np.sum(temp[:, ind:ind+numsamples]**2., axis=1))
+                            beam = np.sum(np.mean(temp[:, ind:ind+numsamples]**2., axis=0))
+                            tempR = beam/abspower
+                        # Save the whole thing
+                        Sub[j, k, l] = tempR
+            # Find the peak value and range of possible values for this time window and save
+            row, col, d = np.unravel_index(np.argmax(Sub, axis=None), Sub.shape)
+            spher_t.append(timemids[i])
+            spher_baz.append(subbaz[row])
+            spher_slow.append(subslows[col])
+            spher_dist.append(dists[d])
+            #TODO add error ranges
+            #spher_bazrange = []
+            #spher_slowrange = []
+            #spher_distrange = []
+            spher_xcorr.append(np.max(Sub))
+            spher_xcorrthresh.append(error_threshold * np.max(Sub))
+        spheresults = dict(t=spher_t, baz=spher_baz, slow=spher_slow,
+                           dist=spher_dist, xcorr=spher_xcorr,
+                           xcorrthresh=spher_xcorrthresh)
+        return timemids, bazpk, slowpk, xcorrpk, bazrange, slowrange, R, spheresults
 
-                    # Apply shifts to matrix of data, then cut out slice corresponding to t1
-
-                    # Compute array-averaged zero-lag normalized correlations
-
-                    # Save in correct part of result matrix
-
-
-        # Plot space and time overview (map view), summary of peaks and movie
-
-        # Uncertainties?
+    else:
+        return timemids, bazpk, slowpk, xcorrpk, bazrange, slowrange, R, None
 
 
 def Slant_stack(st, baz, slows, root=0., coordsys='xy', subsample=True, plot=True, vmin=0.):
@@ -678,7 +831,7 @@ def Slant_stack(st, baz, slows, root=0., coordsys='xy', subsample=True, plot=Tru
     """
     starttime, endtime, sampling_rate, numsamp = checksync(st)
     numsta = len(st)
-    
+
     if isinstance(baz, float):
         fixaz = True
     else:
@@ -690,10 +843,10 @@ def Slant_stack(st, baz, slows, root=0., coordsys='xy', subsample=True, plot=Tru
     if not fixaz and not fixslow:
         raise Exception('Must fix either azimuth or slowness')
 
-    geometry = get_geometry(st, coordsys=coordsys)  # returns matrix of x,y,z, each row corresponds to each station in st, relative to center of array (0,0,0)
+    geometry = aa.get_geometry(st, coordsys=coordsys)  # returns matrix of x,y,z, each row corresponds to each station in st, relative to center of array (0,0,0)
     tsb = timeshifts(geometry, baz, slows)
     alldata = np.vstack([trace.data for trace in st])
-    
+
     if fixaz:
         vesp = np.zeros((len(slows), numsamp))
         # iterate over slownesses
@@ -701,17 +854,17 @@ def Slant_stack(st, baz, slows, root=0., coordsys='xy', subsample=True, plot=Tru
             temp = np.zeros(numsamp)
             # get shifts for this slowness in number of samples
             shifts = tsb[:, 0, k] * sampling_rate
-            if subsample: # interpolate in shift for subsample accuracy
+            if subsample:  # interpolate in shift for subsample accuracy
                 for i in range(numsta):
                     tv = np.arange(0., numsamp)
-                    if root == 0.: # subtract for subsample add for roll because shifting xaxis right is equivalent to rolling vector back
+                    if root == 0.:  # subtract for subsample add for roll because shifting xaxis right is equivalent to rolling vector back
                         temp += 1./numsta * np.interp(tv - shifts[i], tv, alldata[i, :])
                     else:
                         temp += 1./numsta * np.abs(np.interp(tv - shifts[i], tv, alldata[i, :]))**(1./root) * np.sign(alldata[i, :])
                 if root > 0.:
                     temp = np.abs(temp)**root * np.sign(temp)  # take to Nth root and preserve sign
 
-            else: # otherwise round to nearest sample
+            else:  # otherwise round to nearest sample
                 shifts = np.round(shifts)
                 for i in range(numsta):
                     if root == 0.:
@@ -729,17 +882,17 @@ def Slant_stack(st, baz, slows, root=0., coordsys='xy', subsample=True, plot=Tru
             temp = np.zeros(numsamp)
             # get shifts for this slowness in number of samples
             shifts = tsb[:, k, 0] * sampling_rate
-            if subsample: # interpolate in shift for subsample accuracy
+            if subsample:  # interpolate in shift for subsample accuracy
                 for i in range(numsta):
                     tv = np.arange(0., numsamp)
-                    if root == 0.: # subtract for subsample add for roll because shifting xaxis right is equivalent to rolling vector back
+                    if root == 0.:  # subtract for subsample add for roll because shifting xaxis right is equivalent to rolling vector back
                         temp += 1./numsta * np.interp(tv - shifts[i], tv, alldata[i, :])
                     else:
                         temp += 1./numsta * np.abs(np.interp(tv - shifts[i], tv, alldata[i, :]))**(1./root) * np.sign(alldata[i, :])
                 if root > 0.:
                     temp = np.abs(temp)**root * np.sign(temp)  # take to Nth root and preserve sign
 
-            else: # otherwise round to nearest sample
+            else:  # otherwise round to nearest sample
                 shifts = np.round(shifts)
                 for i in range(numsta):
                     if root == 0.:
@@ -749,12 +902,12 @@ def Slant_stack(st, baz, slows, root=0., coordsys='xy', subsample=True, plot=Tru
                 if root > 0.:
                     temp = np.abs(temp)**root * np.sign(temp)  # take to Nth root and preserve sign
             vesp[k, :] = temp.copy()
-        
+
     if plot:
         fig = plt.figure(figsize=(13, 6))
         ax1 = fig.add_subplot(111)
         if fixaz:
-            extent = (0., endtime-starttime, np.min(slows), np.max(slows)) # xmin, xmax, ymin, ymax of corners of image (not center of pixel)
+            extent = (0., endtime-starttime, np.min(slows), np.max(slows))  # xmin, xmax, ymin, ymax of corners of image (not center of pixel)
         if fixslow:
             extent = (0., endtime-starttime, np.min(baz), np.max(baz))
         ax1.imshow(vesp, extent=extent, aspect='auto', vmin=vmin, cmap=cm.gist_heat_r)
@@ -773,36 +926,272 @@ def Slant_stack(st, baz, slows, root=0., coordsys='xy', subsample=True, plot=Tru
     return vesp
 
 
-def timeshifts(geometry, baz, slows):
+def get_timeshift(geometry, sll_x, sll_y, sl_s, grdpts_x, grdpts_y, threeD=True):
+    """Similar to obspy's get_timeshift but accounts for elevation in time delays
+    geometry: output from obspy's get_geometry()
+    threeD (bool): if True, will account for elevation in distances used to compute time shifts
+    """
+    # Correct x distances and y distances for elevation
+    if threeD:
+        xdists = np.sign(geometry[:, 0]) * np.sqrt(geometry[:, 0]**2. + geometry[:, 2]**2)
+        ydists = np.sign(geometry[:, 1]) * np.sqrt(geometry[:, 1]**2. + geometry[:, 2]**2)
+    else:
+        xdists = geometry[:, 0]
+        ydists = geometry[:, 1]
+
+    # optimized version
+    mx = np.outer(xdists, sll_x + np.arange(grdpts_x) * sl_s)
+    my = np.outer(ydists, sll_y + np.arange(grdpts_y) * sl_s)
+    return np.require(
+        mx[:, :, np.newaxis].repeat(grdpts_y, axis=2) +
+        my[:, np.newaxis, :].repeat(grdpts_x, axis=1),
+        dtype=np.float32)
+
+
+def timeshifts(geometry, baz, slows, dists=None, threeD=True):
     """Similar to obspy's get_timeshift but does not require equal spacing of gripts
     geometry: output from obspy's get_geometry()
     baz: list of backazimuths in degrees
     slows: list or array of slownesses in s/km
+    dists: list or array of distances in km (for spherical wavefront method only)
+    threeD (bool): if True, will account for elevation in distances used to compute time shifts
     """
     if isinstance(baz, float):
         baz = [baz]
     if isinstance(slows, float):
         slows = [slows]
+    if dists is not None:
+        if isinstance(dists, float):
+            dists = [dists]
+        numdist = len(dists)
+
     numaz = len(baz)
     numslow = len(slows)
     # unoptimized version for reference
-    nstat = len(geometry)  # last index are center coordinates
-    
-    time_shift_tbl = np.empty((nstat, numaz, numslow), dtype=np.float32)
-    for k in xrange(numaz):
-        bazkr = math.radians(baz[k])
-        for l in xrange(numslow):
-            slowl = slows[l]
-            # azimuth from center to station k,l (in radians)
-            sx = slowl * math.sin(bazkr)
-            sy = slowl * math.cos(bazkr)
-            time_shift_tbl[:,k,l] = sx * geometry[:, 0] + sy * geometry[:,1]
+    nstat = len(geometry)
+
+    # Correct x distances and y distances for elevation
+    if threeD:
+        xdists = np.sign(geometry[:, 0]) * np.sqrt(geometry[:, 0]**2. + geometry[:, 2]**2)
+        ydists = np.sign(geometry[:, 1]) * np.sqrt(geometry[:, 1]**2. + geometry[:, 2]**2)
+    else:
+        xdists = geometry[:, 0]
+        ydists = geometry[:, 1]
+
+    if dists is None:
+        time_shift_tbl = np.empty((nstat, numaz, numslow), dtype=np.float32)
+        for k in xrange(numaz):
+            bazkr = math.radians(baz[k])
+            for l in xrange(numslow):
+                slowl = slows[l]
+                # azimuth from center to station k,l (in radians)
+                sx = slowl * math.sin(bazkr)
+                sy = slowl * math.cos(bazkr)
+                time_shift_tbl[:, k, l] = sx * xdists + sy * ydists
+    else:
+        time_shift_tbl = np.empty((nstat, numaz, numslow, numdist), dtype=np.float32)
+        for k in xrange(numaz):
+            bazkr = math.radians(baz[k])
+            for l in xrange(numslow):
+                slowl = slows[l]
+                for m in xrange(numdist):
+                    D = dists[m]
+                    # azimuth from center to station k,l (in radians)
+                    sx = slowl * math.sin(bazkr)
+                    sy = slowl * math.cos(bazkr)
+                    time_shift_tbl[:, k, l, m] = np.sqrt((-D*sx)**2.+(-D*sy)**2.) - \
+                        np.sqrt((geometry[:, 0]*slowl-D*sx)**2.+(geometry[:, 1]*slowl-D*sy)**2.)
+                    #sx * geometry[:, 0] + sy * geometry[:, 1]
     return time_shift_tbl
-  
+
+
+def array_processing(stream, win_len, win_frac, sll_x, slm_x, sll_y, slm_y,
+                     sl_s, semb_thres, vel_thres, frqlow, frqhigh, stime,
+                     etime, prewhiten, verbose=False, coordsys='lonlat',
+                     timestamp='mlabday', method=0, store=None):
+    """
+    Obspy's array_processing method but modified to use 3D timeshifts
+    Method for Seismic-Array-Beamforming/FK-Analysis/Capon
+
+    :param stream: Stream object, the trace.stats dict like class must
+        contain an :class:`~obspy.core.util.attribdict.AttribDict` with
+        'latitude', 'longitude' (in degrees) and 'elevation' (in km), or 'x',
+        'y', 'elevation' (in km) items/attributes. See param ``coordsys``.
+    :type win_len: float
+    :param win_len: Sliding window length in seconds
+    :type win_frac: float
+    :param win_frac: Fraction of sliding window to use for step
+    :type sll_x: float
+    :param sll_x: slowness x min (lower)
+    :type slm_x: float
+    :param slm_x: slowness x max
+    :type sll_y: float
+    :param sll_y: slowness y min (lower)
+    :type slm_y: float
+    :param slm_y: slowness y max
+    :type sl_s: float
+    :param sl_s: slowness step
+    :type semb_thres: float
+    :param semb_thres: Threshold for semblance
+    :type vel_thres: float
+    :param vel_thres: Threshold for velocity
+    :type frqlow: float
+    :param frqlow: lower frequency for fk/capon
+    :type frqhigh: float
+    :param frqhigh: higher frequency for fk/capon
+    :type stime: :class:`~obspy.core.utcdatetime.UTCDateTime`
+    :param stime: Start time of interest
+    :type etime: :class:`~obspy.core.utcdatetime.UTCDateTime`
+    :param etime: End time of interest
+    :type prewhiten: int
+    :param prewhiten: Do prewhitening, values: 1 or 0
+    :param coordsys: valid values: 'lonlat' and 'xy', choose which stream
+        attributes to use for coordinates
+    :type timestamp: str
+    :param timestamp: valid values: 'julsec' and 'mlabday'; 'julsec' returns
+        the timestamp in seconds since 1970-01-01T00:00:00, 'mlabday'
+        returns the timestamp in days (decimals represent hours, minutes
+        and seconds) since '0001-01-01T00:00:00' as needed for matplotlib
+        date plotting (see e.g. matplotlib's num2date)
+    :type method: int
+    :param method: the method to use 0 == bf, 1 == capon
+    :type store: function
+    :param store: A custom function which gets called on each iteration. It is
+        called with the relative power map and the time offset as first and
+        second arguments and the iteration number as third argument. Useful for
+        storing or plotting the map for each iteration. For this purpose the
+        dump function of this module can be used.
+    :return: :class:`numpy.ndarray` of timestamp, relative relpow, absolute
+        relpow, backazimuth, slowness
+    """
+    res = []
+    eotr = True
+
+    # check that sampling rates do not vary
+    fs = stream[0].stats.sampling_rate
+    if len(stream) != len(stream.select(sampling_rate=fs)):
+        msg = 'in sonic sampling rates of traces in stream are not equal'
+        raise ValueError(msg)
+
+    grdpts_x = int(((slm_x - sll_x) / sl_s + 0.5) + 1)
+    grdpts_y = int(((slm_y - sll_y) / sl_s + 0.5) + 1)
+
+    geometry = aa.get_geometry(stream, coordsys=coordsys, verbose=verbose)
+
+    if verbose:
+        print("geometry:")
+        print(geometry)
+        print("stream contains following traces:")
+        print(stream)
+        print("stime = " + str(stime) + ", etime = " + str(etime))
+
+    # This is only change, uses new get_timeshift function
+    time_shift_table = get_timeshift(geometry, sll_x, sll_y,
+                                     sl_s, grdpts_x, grdpts_y)
+    # offset of arrays
+    spoint, _epoint = aa.get_spoint(stream, stime, etime)
+    #
+    # loop with a sliding window over the dat trace array and apply bbfk
+    #
+    nstat = len(stream)
+    fs = stream[0].stats.sampling_rate
+    nsamp = int(win_len * fs)
+    nstep = int(nsamp * win_frac)
+
+    # generate plan for rfftr
+    nfft = next_pow_2(nsamp)
+    deltaf = fs / float(nfft)
+    nlow = int(frqlow / float(deltaf) + 0.5)
+    nhigh = int(frqhigh / float(deltaf) + 0.5)
+    nlow = max(1, nlow)  # avoid using the offset
+    nhigh = min(nfft // 2 - 1, nhigh)  # avoid using nyquist
+    nf = nhigh - nlow + 1  # include upper and lower frequency
+    # to speed up the routine a bit we estimate all steering vectors in advance
+    steer = np.empty((nf, grdpts_x, grdpts_y, nstat), dtype=np.complex128)
+    clibsignal.calcSteer(nstat, grdpts_x, grdpts_y, nf, nlow,
+                         deltaf, time_shift_table, steer)
+    _r = np.empty((nf, nstat, nstat), dtype=np.complex128)
+    ft = np.empty((nstat, nf), dtype=np.complex128)
+    newstart = stime
+    # 0.22 matches 0.2 of historical C bbfk.c
+    tap = cosine_taper(nsamp, p=0.22)
+    offset = 0
+    relpow_map = np.empty((grdpts_x, grdpts_y), dtype=np.float64)
+    abspow_map = np.empty((grdpts_x, grdpts_y), dtype=np.float64)
+    while eotr:
+        try:
+            for i, tr in enumerate(stream):
+                dat = tr.data[spoint[i] + offset:
+                              spoint[i] + offset + nsamp]
+                dat = (dat - dat.mean()) * tap
+                ft[i, :] = np.fft.rfft(dat, nfft)[nlow:nlow + nf]
+        except IndexError:
+            break
+        ft = np.ascontiguousarray(ft, np.complex128)
+        relpow_map.fill(0.)
+        abspow_map.fill(0.)
+        # computing the covariances of the signal at different receivers
+        dpow = 0.
+        for i in range(nstat):
+            for j in range(i, nstat):
+                _r[:, i, j] = ft[i, :] * ft[j, :].conj()
+                if method == 1:
+                    _r[:, i, j] /= np.abs(_r[:, i, j].sum())
+                if i != j:
+                    _r[:, j, i] = _r[:, i, j].conjugate()
+                else:
+                    dpow += np.abs(_r[:, i, j].sum())
+        dpow *= nstat
+        if method == 1:
+            # P(f) = 1/(e.H R(f)^-1 e)
+            for n in range(nf):
+                _r[n, :, :] = np.linalg.pinv(_r[n, :, :], rcond=1e-6)
+
+        errcode = clibsignal.generalizedBeamformer(
+            relpow_map, abspow_map, steer, _r, nstat, prewhiten,
+            grdpts_x, grdpts_y, nf, dpow, method)
+        if errcode != 0:
+            msg = 'generalizedBeamforming exited with error %d'
+            raise Exception(msg % errcode)
+        ix, iy = np.unravel_index(relpow_map.argmax(), relpow_map.shape)
+        relpow, abspow = relpow_map[ix, iy], abspow_map[ix, iy]
+        if store is not None:
+            store(relpow_map, abspow_map, offset)
+        # here we compute baz, slow
+        slow_x = sll_x + ix * sl_s
+        slow_y = sll_y + iy * sl_s
+
+        slow = np.sqrt(slow_x ** 2 + slow_y ** 2)
+        if slow < 1e-8:
+            slow = 1e-8
+        azimut = 180 * math.atan2(slow_x, slow_y) / math.pi
+        baz = azimut % -360 + 180
+
+        if relpow > semb_thres and 1. / slow > vel_thres:
+            res.append(np.array([newstart.timestamp, relpow, abspow, baz,
+                                 slow]))
+            if verbose:
+                print(newstart, (newstart + (nsamp / fs)), res[-1][1:])
+        if (newstart + (nsamp + nstep) / fs) > etime:
+            eotr = False
+        offset += nstep
+
+        newstart += nstep / fs
+    res = np.array(res)
+    if timestamp == 'julsec':
+        pass
+    elif timestamp == 'mlabday':
+        # 719163 == days between 1970 and 0001 + 1
+        res[:, 0] = res[:, 0] / (24. * 3600) + 719163
+    else:
+        msg = "Option timestamp must be one of 'julsec', or 'mlabday'"
+        raise ValueError(msg)
+    return np.array(res)
+
 
 def checksync(st, resample=False):
     """Check if all traces in st are synced, if so, return basic info
-    
+
     """
     samprates = [trace.stats.sampling_rate for trace in st]
     if np.mean(samprates) != samprates[0]:
@@ -811,7 +1200,7 @@ def checksync(st, resample=False):
             st.resample(np.min(samprates))
         else:
             raise Exception('Sample rates of stream object are not all equal')
-    
+
     stdiff = [st[0].stats.starttime-trace.stats.starttime for trace in st]
     if np.mean(stdiff) != 0.:
         raise Exception('Start times are not uniform')
@@ -819,11 +1208,11 @@ def checksync(st, resample=False):
     stdiff = [st[0].stats.endtime-trace.stats.endtime for trace in st]
     if np.mean(stdiff) != 0.:
         raise Exception('End times are not uniform')
-        
+
     lendiff = [len(st[0])-len(trace) for trace in st]
     if np.mean(lendiff) != 0.:
         raise Exception('Lengths are not equal')
-    
+
     starttime = st[0].stats.starttime
     endtime = st[0].stats.endtime
     sampling_rate = st[0].stats.sampling_rate

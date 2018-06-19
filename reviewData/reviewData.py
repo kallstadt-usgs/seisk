@@ -16,7 +16,7 @@ import os
 from textwrap import wrap
 import urllib2
 from scipy.stats import mode
-from sigproc import sigproc
+import sigproc
 
 """Functions built around obspy for conveniently downloading and interacting with seismic data
 

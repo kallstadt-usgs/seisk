@@ -86,7 +86,7 @@ def getdata(network, station, location, channel, starttime, endtime, attach_resp
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = input('file already exists for this time period, enter Y to load from file, N to reload\n')
+                choice = eval(input('file already exists for this time period, enter Y to load from file, N to reload\n'))
             else:
                 choice = 'N'
     else:
@@ -201,7 +201,7 @@ def getdata_exact(stations, starttime, endtime, attach_response=True, clientname
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = input('file already exists for this time period, enter Y to load from file, N to reload\n')
+                choice = eval(input('file already exists for this time period, enter Y to load from file, N to reload\n'))
             else:
                 choice = 'N'
     else:
@@ -248,7 +248,7 @@ def getdata_exact(stations, starttime, endtime, attach_response=True, clientname
                     st += sttemp.copy()
                 except Exception as e:
                     print(e)
-                    print(('failed to grab data from %s, moving on') % (statup,))
+                    print((('failed to grab data from %s, moving on') % (statup,)))
             if detrend is not None:
                 st.detrend('demean')
             #find min start time
@@ -320,7 +320,7 @@ def getdata_winston(stations, starttime, endtime, ewclientname, port, chanuse='*
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = input('file already exists for this time period, enter Y to load from file, N to reload\n')
+                choice = eval(input('file already exists for this time period, enter Y to load from file, N to reload\n'))
             else:
                 choice = 'N'
     else:
@@ -431,8 +431,8 @@ def getdata_filenames(filenames, chanuse='*', starttime=None, endtime=None,
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = input('file already exists for this time period, \
-                                   enter Y to load from file, N to reload\n')
+                choice = eval(input('file already exists for this time period, \
+                                   enter Y to load from file, N to reload\n'))
             else:
                 choice = 'N'
     else:
@@ -451,13 +451,13 @@ def getdata_filenames(filenames, chanuse='*', starttime=None, endtime=None,
                             client._attach_responses(temp)
                             st += temp
                         except:
-                            print('could not attach response info for %s, \
-                            station correction will not work' % temp.stats.station)
+                            print(('could not attach response info for %s, \
+                            station correction will not work' % temp.stats.station))
                     else:
                         st += temp
             except Exception as e:
                 print(e)
-                print('could not read %s, skipping to next file name' % file1)
+                print(('could not read %s, skipping to next file name' % file1))
         for tr in st:
             tr.data = tr.data.astype(float)
         if detrend is not None:
@@ -484,7 +484,7 @@ def getdata_filenames(filenames, chanuse='*', starttime=None, endtime=None,
                         temp.merge(fill_value=fill_value)
                         st_new += temp
                     finally:
-                        print(('%s would not merge - deleting it') % (sta,))
+                        print((('%s would not merge - deleting it') % (sta,)))
                 st = st_new
         if starttime or endtime:
             if pad:
@@ -615,7 +615,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200.,
                         temp.merge(fill_value=fill_value)
                         st_new += temp
                     finally:
-                        print(('%s would not merge - deleting it') % (sta,))
+                        print((('%s would not merge - deleting it') % (sta,)))
                 st = st_new
         for trace in st:
             try:
@@ -1399,7 +1399,7 @@ class InteractivePlot:
         self.cidkey = self.fig.canvas.mpl_connect('key_press_event', self.on_key)
         self.cidscroll = self.fig.canvas.mpl_connect('scroll_event', self.on_scroll)
         self.fig.canvas.mpl_disconnect(self.fig.canvas.manager.key_press_handler_id)  # turn off the automatic keys
-        print(self.menu)
+        print((self.menu))
         self.fig.canvas.start_event_loop(timeout=-1)
 
     def disconnect(self):
@@ -1683,7 +1683,7 @@ class InteractivePlot:
                             trace.remove_response(output=self.output, pre_filt=self.cosfilt,
                                                   water_level=self.water_level, taper=self.dotaper, taper_fraction=self.taper)
                         except:
-                            print('Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,))
+                            print(('Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)))
                             removeid.append(trace.id)
                     for rmid in removeid:  # Delete uncorrected ones
                         for tr in self.st_current.select(id=rmid):
@@ -1749,7 +1749,7 @@ class InteractivePlot:
                 self.menu_print = None
             else:
                 self.menu_print = self.menu
-            print(self.menu)
+            print((self.menu))
             redraw = True
             #update = False
 
@@ -2230,7 +2230,7 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
                 try:
                     trace.remove_response(output='ACC', pre_filt=cosfilt, water_level=water_level)
                 except:
-                    print('Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,))
+                    print(('Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)))
                     removeid.append(trace.id)
             for rmid in removeid:  # Delete uncorrected ones
                 for tr in stacc.select(id=rmid):
@@ -2250,7 +2250,7 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
                 try:
                     trace.remove_response(output='VEL', pre_filt=cosfilt, water_level=water_level)
                 except:
-                    print('Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,))
+                    print(('Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)))
                     removeid.append(trace.id)
             for rmid in removeid:  # Delete uncorrected ones
                 for tr in stvel.select(id=rmid):
@@ -2261,14 +2261,14 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
             trace.stats.gmparam['pga'] = np.abs(trace.max())  # in obspy, max gives the max absolute value of the data
             stvel[j].stats.gmparam['pga'] = np.abs(trace.max())
             if verbal is True:
-                print(('%s - PGA = %1.3f m/s') % (trace.id, np.abs(trace.max())))
+                print((('%s - PGA = %1.3f m/s') % (trace.id, np.abs(trace.max()))))
 
     if pgv is True:
         for j, trace in enumerate(stvel):
             trace.stats.gmparam['pgv'] = np.abs(trace.max())
             stacc[j].stats.gmparam['pgv'] = np.abs(trace.max())
             if verbal is True:
-                print(('%s - PGV = %1.3f m/s') % (trace.id, np.abs(trace.max())))
+                print((('%s - PGV = %1.3f m/s') % (trace.id, np.abs(trace.max()))))
 
     if psa is True:
         for j, trace in enumerate(stacc):
@@ -2287,7 +2287,7 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
                     psa1 = abs(min(dd))
                 out.append(psa1)
                 if verbal is True:
-                    print(('%s - PSA at %1.1f sec = %1.3f m/s^2') % (trace.id, T, psa1))
+                    print((('%s - PSA at %1.1f sec = %1.3f m/s^2') % (trace.id, T, psa1)))
             trace.stats.gmparam['periods'] = periods
             trace.stats.gmparam['psa'] = out
             stvel[j].stats.gmparam['periods'] = periods
@@ -2350,7 +2350,7 @@ def fourier_spectra(st, win=None, nfft=None, powerspec=False, recsec=False, xlim
         dat = st1.data
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print 'Time window specified not compatible with length of time series'
+                print('Time window specified not compatible with length of time series')
                 return
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
             tvec = tvec[(tvec >= win[0]) & (tvec <= win[1])]

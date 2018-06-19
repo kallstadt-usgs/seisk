@@ -2319,3 +2319,64 @@ def unique_list(seq):  # make a list only contain unique values and keep their o
     seen = set()
     seen_add = seen.add
     return [x for x in seq if not (x in seen or seen_add(x))]
+
+def fourier_spectra(st, win=None, nfft=None, powerspec=False, recsec=False, xlim=None):
+    """
+    Plot multitaper fourier amplitude spectra of signals in st
+    :param st: obspy stream or trace containing data to plot
+    :param win: tuple of time window in seconds (e.g. win=(3., 20.)) over which to compute amplitude spectrum
+    :param nfft: number of points to use in nfft, default None uses the next power of 2 of length of dat
+    :param powerspec: = False for fourier amplitude spectrum, True for power spectrum
+    :param recsec: if True, will plot spectra each in their own plot, otherwise all spectra will be in the same plot
+    :param xlim: tuple of xlims like (0., 100.)
+    """
+
+    ###Should I have logx, logy as parameters? 
+    ###What about xunits? Won't it always be Freq? yunits?
+    from sigproc import sigproc
+    st = Stream(st)  # in case it's a trace
+    st.detrend('demean')
+
+
+    if recsec:
+        fig, axes = plt.subplots(len(st), sharex=True, sharey=True, figsize=(10, 10))
+    else:
+        fig, ax = plt.subplots(1, figsize=(8, 5))
+   
+    plt.suptitle('Time period: %s to %s' % (str(st[0].stats.starttime), str(st[0].stats.endtime)))
+
+    for i, st1 in enumerate(st):
+        tvec = sigproc.maketvec(st1)  # Time vector
+        dat = st1.data
+        if win is not None:
+            if win[1] > tvec.max() or win[0] < tvec.min():
+                print 'Time window specified not compatible with length of time series'
+                return
+            dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
+            tvec = tvec[(tvec >= win[0]) & (tvec <= win[1])]
+
+        if nfft is None: 
+            nfft = int(nextpow2((st1.stats.endtime - st1.stats.starttime) * st1.stats. sampling_rate))
+        st1.taper(max_percentage=0.05, type='cosine') 
+        # SHOULD I BE USING mtspec instead? And produce spec, freq like in make_multitaper??????
+        if powerspec is False:
+            amps = np.abs(np.fft.rfft(dat, n=nfft))
+            freqs = np.fft.rfftfreq(nfft, 1/st1.stats.sampling_rate)
+        else:
+            amps = np.abs(np.fft.fft(dat, n=nfft))**2
+            freqs = np.fft.fftfreq(nfft, 1/st1.stats.sampling_rate)
+        if recsec:
+            ax = axes[i]
+        ax.plot(freqs, amps, label=st1.id)
+        if i == len(st)-1 and recsec is False:
+            plt.legend()
+        elif recsec:
+            plt.legend()
+        if powerspec is False:
+            plt.title('Amplitude Spectrum')
+        else:
+            plt.title('Power Spectrum')
+    ax.set_xlabel('Frequency (Hz)')
+    plt.show()
+
+

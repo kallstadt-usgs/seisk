@@ -2,7 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from . import sigproc
+import sigproc
 import obspy.signal.array_analysis as aa  # array_transff_freqslowness, array_transff_wavenumber, array_processing, get_geometry, get_timeshift, get_spoint, get_geometry
 from obspy.signal.util import util_geo_km, next_pow_2
 from obspy import UTCDateTime, Stream
@@ -633,7 +633,7 @@ def backproject(st, v, tshifts, freqmin, freqmax, winlen, overlap, gridx, gridy,
             power[i, n, :] = ((1./nsta) * np.abs(np.sum(extract, 0)))**2
             powernon[i, n, :] = ((1./nsta) * np.abs(np.sum(extractnon, 0)))**2
             meanpow[i, n] = np.mean(power[i, n, :])/np.mean(powernon[i, n, :])
-        print(('%i of %i' % (n, nwins)))
+        print('%i of %i' % (n, nwins))
 
     fvec = freqs[(freqs >= freqmin) & (freqs <= freqmax)]
     tvec = sttm + incr/2.
@@ -980,9 +980,9 @@ def timeshifts(geometry, baz, slows, dists=None, threeD=True):
 
     if dists is None:
         time_shift_tbl = np.empty((nstat, numaz, numslow), dtype=np.float32)
-        for k in range(numaz):
+        for k in xrange(numaz):
             bazkr = math.radians(baz[k])
-            for l in range(numslow):
+            for l in xrange(numslow):
                 slowl = slows[l]
                 # azimuth from center to station k,l (in radians)
                 sx = slowl * math.sin(bazkr)
@@ -990,11 +990,11 @@ def timeshifts(geometry, baz, slows, dists=None, threeD=True):
                 time_shift_tbl[:, k, l] = sx * xdists + sy * ydists
     else:
         time_shift_tbl = np.empty((nstat, numaz, numslow, numdist), dtype=np.float32)
-        for k in range(numaz):
+        for k in xrange(numaz):
             bazkr = math.radians(baz[k])
-            for l in range(numslow):
+            for l in xrange(numslow):
                 slowl = slows[l]
-                for m in range(numdist):
+                for m in xrange(numdist):
                     D = dists[m]
                     # azimuth from center to station k,l (in radians)
                     sx = slowl * math.sin(bazkr)
@@ -1083,7 +1083,7 @@ def array_processing(stream, win_len, win_frac, sll_x, slm_x, sll_y, slm_y,
         print(geometry)
         print("stream contains following traces:")
         print(stream)
-        print(("stime = " + str(stime) + ", etime = " + str(etime)))
+        print("stime = " + str(stime) + ", etime = " + str(etime))
 
     # This is only change, uses new get_timeshift function
     time_shift_table = get_timeshift(geometry, sll_x, sll_y,
@@ -1171,7 +1171,7 @@ def array_processing(stream, win_len, win_frac, sll_x, slm_x, sll_y, slm_y,
             res.append(np.array([newstart.timestamp, relpow, abspow, baz,
                                  slow]))
             if verbose:
-                print((newstart, (newstart + (nsamp / fs)), res[-1][1:]))
+                print(newstart, (newstart + (nsamp / fs)), res[-1][1:])
         if (newstart + (nsamp + nstep) / fs) > etime:
             eotr = False
         offset += nstep

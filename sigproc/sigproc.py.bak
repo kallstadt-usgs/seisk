@@ -36,7 +36,7 @@ def domfreq(st, win=None):
         acc = np.diff(trace.data)*trace.stats.sampling_rate
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print('Time window specified not compatible with length of time series')
+                print 'Time window specified not compatible with length of time series'
                 return
             vel = vel[(tvec >= win[0]) & (tvec <= win[1])]
             acc = acc[(tvec >= win[0]) & (tvec <= win[1])]
@@ -63,7 +63,7 @@ def peakfreq(st, win=None):
         dat = trace.data
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print('Time window specified not compatible with length of time series')
+                print 'Time window specified not compatible with length of time series'
                 return
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
         freqs, amps = spectrum_manual(dat, tvec)
@@ -95,7 +95,7 @@ def meansqfreq(st, freqlim=(0, 25), win=None):
         dat = trace.data
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print('Time window specified not compatible with length of time series')
+                print 'Time window specified not compatible with length of time series'
                 return
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
         freqs, amps = spectrum_manual(dat, tvec)
@@ -128,13 +128,13 @@ def meansqfreqSN(st, stnoise, SNrat=1.5, freqlim=(0, 25), win=None):
     stnoise = Stream(stnoise)
     for i, trace in enumerate(st):
         if trace.stats.sampling_rate != stnoise[i].stats.sampling_rate:
-            print('Signal and noise sample rates are different. Abort!')
+            print 'Signal and noise sample rates are different. Abort!'
             return
         tvec = maketvec(trace)  # Time vector
         dat = trace.data
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print('Time window specified not compatible with length of time series')
+                print 'Time window specified not compatible with length of time series'
                 return
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
             trace = trace.trim(trace.stats.starttime+win[0], trace.stats.starttime+win[1])
@@ -174,7 +174,7 @@ def spectrumSN(st, stnoise, SNrat=1.5, win=None):
     ampmask = []
     for i, trace in enumerate(st):
         if trace.stats.sampling_rate != stnoise[i].stats.sampling_rate:
-            print('Signal and noise sample rates are different. Abort!')
+            print 'Signal and noise sample rates are different. Abort!'
             return
         tvec = maketvec(trace)  # Time vector
         dat = trace.data
@@ -183,7 +183,7 @@ def spectrumSN(st, stnoise, SNrat=1.5, win=None):
 
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print('Time window specified not compatible with length of time series')
+                print 'Time window specified not compatible with length of time series'
                 return
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
             trace = trace.trim(trace.stats.starttime+win[0], trace.stats.starttime+win[1])
@@ -221,7 +221,7 @@ def powspecSN(st, stnoise, SNrat=1.5, win=None):
     ampmask = []
     for i, trace in enumerate(st):
         if trace.stats.sampling_rate != stnoise[i].stats.sampling_rate:
-            print('Signal and noise sample rates are different. Abort!')
+            print 'Signal and noise sample rates are different. Abort!'
             return
         Fs = trace.stats.sampling_rate  # Time vector
         dat = trace.data
@@ -231,7 +231,7 @@ def powspecSN(st, stnoise, SNrat=1.5, win=None):
 
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print('Time window specified not compatible with length of time series')
+                print 'Time window specified not compatible with length of time series'
                 return
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
             trace = trace.trim(trace.stats.starttime+win[0], trace.stats.starttime+win[1])
@@ -422,7 +422,7 @@ def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False,
     sample_int = tvec[1]-tvec[0]
     if win is not None:
         if win[1] > tvec.max() or win[0] < tvec.min():
-            print('Time window specified not compatible with length of time series')
+            print 'Time window specified not compatible with length of time series'
             return
         dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
         tvec = tvec[(tvec >= win[0]) & (tvec <= win[1])]
@@ -594,10 +594,10 @@ def subsamplxcorr(tr1, tr2, shifts=None):
     maxcor, maxlag = subsamplxcorr(tr1, tr2, shifts=None)
     """
     if tr1.stats.sampling_rate != tr2.stats.sampling_rate:
-        print('tr1 and tr2 have different sampling rates, abort')
+        print 'tr1 and tr2 have different sampling rates, abort'
         return
     if len(tr1) != len(tr2):
-        print('tr1 and tr2 are different lengths, abort')
+        print 'tr1 and tr2 are different lengths, abort'
         return
 
     if shifts is None:

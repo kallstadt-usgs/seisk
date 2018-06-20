@@ -884,7 +884,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
         i += 1
     if missing == len(st):
         print('nothing to see over here, go back')
-    plt.tick_params(left='off', right='off')
+    plt.tick_params(left=False, right=False)
     plt.tick_params(axis='both', which='major', labelsize=12)
 
     plt.autoscale(enable=True, axis='y', tight=True)
@@ -902,7 +902,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
     else:
         ax.set_ylim(miny, maxy)
     if grid:
-        plt.grid('on')
+        plt.grid(True)
 
     mcs = ('%.2f' % (tmin.microsecond/10.**6)).replace('0.', '')
     timeprint = tmin.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
@@ -1317,7 +1317,7 @@ class InteractivePlot:
         self.picks = {}
         self.init = 0
         self.st_original = st.copy()
-        self.st = st
+        self.st = st.copy()
         self.st_current = st.copy()
         self.st_last = st.copy()
         self.tempdelsta = None  # hold station to delete until it's confirmed

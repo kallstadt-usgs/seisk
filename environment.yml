@@ -23,3 +23,5 @@ dependencies:
 - pyqt
 - mtspec
 - statsmodels
+- spyder
+- xlrd

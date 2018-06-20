@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+    #!/usr/bin/env python
 
 from obspy import read, Stream
 #import matplotlib
@@ -14,9 +14,10 @@ import obspy.signal.filter as filte
 from obspy.core import AttribDict
 import os
 from textwrap import wrap
-import urllib.request, urllib.error, urllib.parse
+import urllib
 from scipy.stats import mode
-import sigproc
+from sigproc import sigproc
+
 
 """Functions built around obspy for conveniently downloading and interacting with seismic data
 
@@ -638,16 +639,16 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
            labelsize=12., addscale=False, unitlabel=None, convert=1.,
            scaleperc=0.9, vlines=None, vlinestyle='--', vlinecolor='k',
            pad=False, fill_value=0., xonly=False, samezero=False, grid=True,
-           title=True, labellist=None, labelloc='left'):
+           title=True, labellist=None, labelloc='left', block=False):
     """Plot record section of data from an obspy stream
-    
+
     Note that a lot of the functionality is built in for use by
     InteractivePlot and is not useful for standalone use.
 
     Args:
         st: obspy stream to plot
         norm (bool): True or False, normalize each trace by its maximum
-        xlim (tup): tuple of axes limits e.g. (0,100), 
+        xlim (tup): tuple of axes limits e.g. (0,100),
             None uses default axis limits
         ylim (tup): tuple of axes limits e.g. (0,100),
             None uses default axis limits
@@ -697,6 +698,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
             labels corresponding to each trace (same order as st)
         labelloc (str): 'left' will be left of traces, 'below' will be below
             each trace at left, 'above' will be above each trace at left
+        block (bool): if True, will block code from continuing until figure is closed
 
     Returns:
         handle of figure
@@ -740,7 +742,6 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
     elif update is True and fighandle is None:
         print('Cannot update without specifying a figure handle, creating new figure')
         update = False
-
 
     if update is False:
         if figsize is None:
@@ -970,20 +971,20 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
         newlabs = []
         for sec in seclabels:
             value1 = tmin + sec
-            if tmax-tmin > 3600.*24.:# greater than a day, include day but not second
+            if tmax-tmin > 3600.*24.:  # greater than a day, include day but not second
                 newlabs.append(value1.strftime('%d %b-%H:%M'))
                 rotation = 5
-            elif tmax-tmin > 3600.: # greater than an hour, show full seconds
+            elif tmax-tmin > 3600.:  # greater than an hour, show full seconds
                 newlabs.append(value1.strftime('%d %b-%H:%M:%S'))
                 rotation = 8
             else:
                 mcs = ('%.2f' % (value1.microsecond/10.**6)).replace('0.', '')
                 newlabs.append(value1.strftime('%H:%M:%S.') + mcs)
                 rotation = 0
-        ax.set_xticklabels(newlabs, fontsize=labelsize, ha="center", rotation=rotation) #, rotation=20)
+        ax.set_xticklabels(newlabs, fontsize=labelsize, ha="center", rotation=rotation)  # , rotation=20)
 
     if update is False:
-        plt.show()
+        plt.show(block=block)
     elif update is True:
         ax.figure.canvas.draw()
         if textbox is True:
@@ -1015,7 +1016,7 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
     :param yunits: string defining y units - units should be input time series units squared per Hz
     :param groupstations: only if recsec is True - if True, will plot all channels from same station on one plot
     """
-    import random
+
     st = Stream(st)  # in case it's a trace
     if detrend is not None:
         st.detrend(detrend)
@@ -1044,7 +1045,7 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
         if colors1 is not None:
             color = colors1[i]
         else:
-            color = random.rand(3, 1)
+            color = np.random.rand(3,)
         if recsec:
             ind = stas.index(st[i].stats.station)
             ax = axes[ind]
@@ -1193,7 +1194,7 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
             minP = maxP/1e6
             vmin = minP
             vmax = maxP
-            
+
         print(('Max power: %1.2e, Min power: %1.2e\n' % (maxP, minP)))
 
         if log1 is True and minP is not None and maxP is not None:
@@ -1284,7 +1285,7 @@ class InteractivePlot:
     """
 
     def __init__(self, st, fig=None, indfirst=0, maxtraces=10, norm=True,
-                 xlim=None, ylim=None, scalfact=1.,cosfilt=(0.01, 0.02, 20, 30),
+                 xlim=None, ylim=None, scalfact=1., cosfilt=(0.01, 0.02, 20, 30),
                  water_level=60, output='VEL', textline=['>', '>', '>', '>', '>'],
                  menu=None, quickdraw=True, processing=None, taper=None,
                  tscale='relative', vlines=None,
@@ -1392,15 +1393,26 @@ class InteractivePlot:
         self.ylims = list(self.ax.get_ylim())
         self.connect()
 
+    def closed(self, evt):
+        """
+        disconnect and continue code
+        """
+        self.fig.canvas.mpl_disconnect(self.cidkey)
+        self.fig.canvas.mpl_disconnect(self.cidscroll)
+        self.fig.canvas.stop_event_loop()
+        print('Exiting interactive plotting')
+        self.print1 = ['>', '>', '>', '>', '>']
+
     def connect(self):
         """
-        connect to needed events, suspends code until connection is closed
+        connect to needed events, suspends code until figure is closed
         """
         self.cidkey = self.fig.canvas.mpl_connect('key_press_event', self.on_key)
         self.cidscroll = self.fig.canvas.mpl_connect('scroll_event', self.on_scroll)
         self.fig.canvas.mpl_disconnect(self.fig.canvas.manager.key_press_handler_id)  # turn off the automatic keys
         print((self.menu))
-        self.fig.canvas.start_event_loop(timeout=-1)
+        self.fig.canvas.mpl_connect('close_event', self.closed)
+        self.fig.canvas.start_event_loop(timeout=6000)  # -1
 
     def disconnect(self):
         """
@@ -1409,6 +1421,7 @@ class InteractivePlot:
         self.fig.canvas.mpl_disconnect(self.cidkey)
         self.fig.canvas.mpl_disconnect(self.cidscroll)
         self.fig.canvas.stop_event_loop()
+        self.print1 = ['>', '>', '>', '>', '>']
 
     def on_key(self, event):
         """
@@ -2058,8 +2071,8 @@ def attach_distaz_IRIS(st, event_lat, event_lon):
             loc = trace.stats.location
         # build the url use to get station info from IRIS webservices
         url = ('http://service.iris.edu/fdsnws/station/1/query?net=%s&sta=%s&loc=%s&cha=%s&level=station&format=text&includecomments=true&nodata=404' % (trace.stats.network, trace.stats.station, loc, trace.stats.channel))
-        temp = urllib.request.urlopen(url)
-        file1 = temp.read()
+        with urllib.request.urlopen(url) as temp:
+            file1 = temp.read().decode('utf-8')
         lines = [line.split('|') for line in file1.split('\n')[1:]]
         sta_lat = float(lines[0][2])
         sta_lon = float(lines[0][3])
@@ -2083,8 +2096,8 @@ def attach_coords_IRIS(st):
         else:
             loc = trace.stats.location
         url = ('http://service.iris.edu/fdsnws/station/1/query?net=%s&sta=%s&loc=%s&cha=%s&level=station&format=text&includecomments=true&nodata=404' % (trace.stats.network, trace.stats.station, loc, trace.stats.channel))
-        temp = urllib.request.urlopen(url)
-        file1 = temp.read()
+        with urllib.request.urlopen(url) as temp:
+            file1 = temp.read().decode('utf-8')
         lines = [line.split('|') for line in file1.split('\n')[1:]]
         lat = float(lines[0][2])
         lon = float(lines[0][3])
@@ -2135,8 +2148,8 @@ def get_stations_iris(event_lat, event_lon, event_time, startbefore=None, minrad
     # build the url use to get station info from IRIS webservices
     url = ('http://service.iris.edu/fdsnws/station/1/query?latitude=%f&longitude=%f&minradius=%f&maxradius=%f&cha=%s&startbefore=%s&endafter=%s&level=channel&format=text&nodata=404'
            % (event_lat, event_lon, minradiuskm/111.32, maxradiuskm/111.32, chan, sttime, event_time.strftime('%Y-%m-%dT%H:%M:%S')))
-    temp = urllib.request.urlopen(url)
-    file1 = temp.read()
+    with urllib.request.urlopen(url) as temp:
+        file1 = temp.read().decode('utf-8')
     lines = [line.split('|') for line in file1.split('\n')[1:]]
     source = 'IRIS'
     return lines, source
@@ -2152,8 +2165,8 @@ def get_stations_ncedc(event_lat, event_lon, event_time, minradiuskm=0., maxradi
     url = ('http://service.ncedc.org/fdsnws/station/1/query?latitude=%f&longitude=%f&minradius=%f&maxradius=%f&cha=%s&startbefore=%s&endafter=%s&level=channel&format=text&nodata=404'
            % (event_lat, event_lon, minradiuskm/111.32, maxradiuskm/111.32, chan, event_time.strftime('%Y-%m-%dT%H:%M:%S'),
               event_time.strftime('%Y-%m-%dT%H:%M:%S')))
-    temp = urllib.request.urlopen(url)
-    file1 = temp.read()
+    with urllib.request.urlopen(url) as temp:
+        file1 = temp.read().decode('utf-8')
     lines = [line.split('|') for line in file1.split('\n')[1:]]
     source = 'NCEDC'
     return lines, source
@@ -2320,6 +2333,7 @@ def unique_list(seq):  # make a list only contain unique values and keep their o
     seen_add = seen.add
     return [x for x in seq if not (x in seen or seen_add(x))]
 
+
 def fourier_spectra(st, win=None, nfft=None, powerspec=False, recsec=False, xlim=None):
     """
     Plot multitaper fourier amplitude spectra of signals in st
@@ -2331,18 +2345,17 @@ def fourier_spectra(st, win=None, nfft=None, powerspec=False, recsec=False, xlim
     :param xlim: tuple of xlims like (0., 100.)
     """
 
-    ###Should I have logx, logy as parameters? 
+    ###Should I have logx, logy as parameters?
     ###What about xunits? Won't it always be Freq? yunits?
     from sigproc import sigproc
     st = Stream(st)  # in case it's a trace
     st.detrend('demean')
 
-
     if recsec:
         fig, axes = plt.subplots(len(st), sharex=True, sharey=True, figsize=(10, 10))
     else:
         fig, ax = plt.subplots(1, figsize=(8, 5))
-   
+
     plt.suptitle('Time period: %s to %s' % (str(st[0].stats.starttime), str(st[0].stats.endtime)))
 
     for i, st1 in enumerate(st):
@@ -2355,10 +2368,10 @@ def fourier_spectra(st, win=None, nfft=None, powerspec=False, recsec=False, xlim
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
             tvec = tvec[(tvec >= win[0]) & (tvec <= win[1])]
 
-        if nfft is None: 
+        if nfft is None:
             nfft = int(nextpow2((st1.stats.endtime - st1.stats.starttime) * st1.stats. sampling_rate))
-        st1.taper(max_percentage=0.05, type='cosine') 
-        # SHOULD I BE USING mtspec instead? And produce spec, freq like in make_multitaper??????
+        st1.taper(max_percentage=0.05, type='cosine')
+
         if powerspec is False:
             amps = np.abs(np.fft.rfft(dat, n=nfft))
             freqs = np.fft.rfftfreq(nfft, 1/st1.stats.sampling_rate)
@@ -2378,5 +2391,3 @@ def fourier_spectra(st, win=None, nfft=None, powerspec=False, recsec=False, xlim
             plt.title('Power Spectrum')
     ax.set_xlabel('Frequency (Hz)')
     plt.show()
-
-

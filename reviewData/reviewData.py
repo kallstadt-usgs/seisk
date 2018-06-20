@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+    #!/usr/bin/env python
 
 from obspy import read, Stream
 #import matplotlib
@@ -14,9 +14,10 @@ import obspy.signal.filter as filte
 from obspy.core import AttribDict
 import os
 from textwrap import wrap
-import urllib2
+import urllib
 from scipy.stats import mode
-import sigproc
+from sigproc import sigproc
+
 
 """Functions built around obspy for conveniently downloading and interacting with seismic data
 
@@ -86,7 +87,7 @@ def getdata(network, station, location, channel, starttime, endtime, attach_resp
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = raw_input('file already exists for this time period, enter Y to load from file, N to reload\n')
+                choice = eval(input('file already exists for this time period, enter Y to load from file, N to reload\n'))
             else:
                 choice = 'N'
     else:
@@ -107,7 +108,7 @@ def getdata(network, station, location, channel, starttime, endtime, attach_resp
                 try:
                     st.merge(fill_value=fill_value)
                 except:
-                    print 'bulk merge failed, trying station by station'
+                    print('bulk merge failed, trying station by station')
                     st_new = Stream()
                     stationlist = unique_list([trace.stats.station for trace in st])
                     for sta in stationlist:
@@ -132,7 +133,7 @@ def getdata(network, station, location, channel, starttime, endtime, attach_resp
             if pad:
                 st.trim(starttime=mint, pad=True, fill_value=fill_value)
         except Exception as e:
-            print e
+            print(e)
             return
         #make sure it's in the same order as it was originally input
         order = [trace.stats.station for trace in st]
@@ -201,7 +202,7 @@ def getdata_exact(stations, starttime, endtime, attach_response=True, clientname
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = raw_input('file already exists for this time period, enter Y to load from file, N to reload\n')
+                choice = eval(input('file already exists for this time period, enter Y to load from file, N to reload\n'))
             else:
                 choice = 'N'
     else:
@@ -225,7 +226,7 @@ def getdata_exact(stations, starttime, endtime, attach_response=True, clientname
                         try:
                             sttemp.merge(fill_value=fill_value)
                         except:
-                            print 'bulk merge failed, trying station by station'
+                            print('bulk merge failed, trying station by station')
                             st_new = Stream()
                             stationlist = unique_list([trace.stats.station for trace in sttemp])
                             for sta in stationlist:
@@ -247,8 +248,8 @@ def getdata_exact(stations, starttime, endtime, attach_response=True, clientname
                         sttemp.detrend(detrend)
                     st += sttemp.copy()
                 except Exception as e:
-                    print e
-                    print('failed to grab data from %s, moving on') % (statup,)
+                    print(e)
+                    print((('failed to grab data from %s, moving on') % (statup,)))
             if detrend is not None:
                 st.detrend('demean')
             #find min start time
@@ -256,7 +257,7 @@ def getdata_exact(stations, starttime, endtime, attach_response=True, clientname
             if pad:
                 st.trim(starttime=mint, pad=True, fill_value=fill_value)
         except Exception as e:
-            print e
+            print(e)
             return
 
         #save files
@@ -320,7 +321,7 @@ def getdata_winston(stations, starttime, endtime, ewclientname, port, chanuse='*
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = raw_input('file already exists for this time period, enter Y to load from file, N to reload\n')
+                choice = eval(input('file already exists for this time period, enter Y to load from file, N to reload\n'))
             else:
                 choice = 'N'
     else:
@@ -348,8 +349,8 @@ def getdata_winston(stations, starttime, endtime, ewclientname, port, chanuse='*
                     else:
                         st += temp
                 except Exception as e:
-                    print e
-                    print('No data available from %s.%s.%s' % (sta))
+                    print(e)
+                    print(('No data available from %s.%s.%s' % (sta)))
         #find min start time
         if 'st' in locals():
             if len(st) != 0:  # make sure st isn't empty
@@ -361,10 +362,10 @@ def getdata_winston(stations, starttime, endtime, ewclientname, port, chanuse='*
                     try:
                         client._attach_responses(st)
                     except:
-                        print 'could not attach response info, station correction will not work'
+                        print('could not attach response info, station correction will not work')
                 if savedat:
                     st.write(folderdat+'/'+filename, format='PICKLE')
-                print st
+                print(st)
                 return st
             else:
                 print('No data returned')
@@ -431,8 +432,8 @@ def getdata_filenames(filenames, chanuse='*', starttime=None, endtime=None,
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = raw_input('file already exists for this time period, \
-                                   enter Y to load from file, N to reload\n')
+                choice = eval(input('file already exists for this time period, \
+                                   enter Y to load from file, N to reload\n'))
             else:
                 choice = 'N'
     else:
@@ -451,13 +452,13 @@ def getdata_filenames(filenames, chanuse='*', starttime=None, endtime=None,
                             client._attach_responses(temp)
                             st += temp
                         except:
-                            print 'could not attach response info for %s, \
-                            station correction will not work' % temp.stats.station
+                            print(('could not attach response info for %s, \
+                            station correction will not work' % temp.stats.station))
                     else:
                         st += temp
             except Exception as e:
-                print e
-                print 'could not read %s, skipping to next file name' % file1
+                print(e)
+                print(('could not read %s, skipping to next file name' % file1))
         for tr in st:
             tr.data = tr.data.astype(float)
         if detrend is not None:
@@ -466,7 +467,7 @@ def getdata_filenames(filenames, chanuse='*', starttime=None, endtime=None,
             try:
                 st.merge(fill_value=fill_value)
             except:
-                print 'bulk merge failed, trying station by station'
+                print('bulk merge failed, trying station by station')
                 st_new = Stream()
                 stationlist = unique_list([trace.stats.station for trace in st])
                 for sta in stationlist:
@@ -484,7 +485,7 @@ def getdata_filenames(filenames, chanuse='*', starttime=None, endtime=None,
                         temp.merge(fill_value=fill_value)
                         st_new += temp
                     finally:
-                        print('%s would not merge - deleting it') % (sta,)
+                        print((('%s would not merge - deleting it') % (sta,)))
                 st = st_new
         if starttime or endtime:
             if pad:
@@ -597,7 +598,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200.,
             try:
                 st.merge(fill_value=fill_value)
             except:
-                print 'bulk merge failed, trying station by station'
+                print('bulk merge failed, trying station by station')
                 st_new = Stream()
                 stationlist = unique_list([trace.stats.station for trace in st])
                 for sta in stationlist:
@@ -615,7 +616,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200.,
                         temp.merge(fill_value=fill_value)
                         st_new += temp
                     finally:
-                        print('%s would not merge - deleting it') % (sta,)
+                        print((('%s would not merge - deleting it') % (sta,)))
                 st = st_new
         for trace in st:
             try:
@@ -624,7 +625,7 @@ def getepidata(event_lat, event_lon, event_time, tstart=-5., tend=200.,
                                                       'longitude': coord['longitude'],
                                                       'elevation': coord['elevation']})
             except:
-                print('Could not attach coordinates for %s' % trace.id)
+                print(('Could not attach coordinates for %s' % trace.id))
 
         st_all += st
 
@@ -638,16 +639,16 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
            labelsize=12., addscale=False, unitlabel=None, convert=1.,
            scaleperc=0.9, vlines=None, vlinestyle='--', vlinecolor='k',
            pad=False, fill_value=0., xonly=False, samezero=False, grid=True,
-           title=True, labellist=None, labelloc='left'):
+           title=True, labellist=None, labelloc='left', block=False):
     """Plot record section of data from an obspy stream
-    
+
     Note that a lot of the functionality is built in for use by
     InteractivePlot and is not useful for standalone use.
 
     Args:
         st: obspy stream to plot
         norm (bool): True or False, normalize each trace by its maximum
-        xlim (tup): tuple of axes limits e.g. (0,100), 
+        xlim (tup): tuple of axes limits e.g. (0,100),
             None uses default axis limits
         ylim (tup): tuple of axes limits e.g. (0,100),
             None uses default axis limits
@@ -697,6 +698,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
             labels corresponding to each trace (same order as st)
         labelloc (str): 'left' will be left of traces, 'below' will be below
             each trace at left, 'above' will be above each trace at left
+        block (bool): if True, will block code from continuing until figure is closed
 
     Returns:
         handle of figure
@@ -735,12 +737,11 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
             else:
                 ax = fig.get_axes()
         except:
-            print 'need to define fighandle correctly to update current plot, creating new figure'
+            print('need to define fighandle correctly to update current plot, creating new figure')
             update = False
     elif update is True and fighandle is None:
         print('Cannot update without specifying a figure handle, creating new figure')
         update = False
-
 
     if update is False:
         if figsize is None:
@@ -882,7 +883,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
             missing += 1
         i += 1
     if missing == len(st):
-        print 'nothing to see over here, go back'
+        print('nothing to see over here, go back')
     plt.tick_params(left='off', right='off')
     plt.tick_params(axis='both', which='major', labelsize=12)
 
@@ -970,20 +971,20 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
         newlabs = []
         for sec in seclabels:
             value1 = tmin + sec
-            if tmax-tmin > 3600.*24.:# greater than a day, include day but not second
+            if tmax-tmin > 3600.*24.:  # greater than a day, include day but not second
                 newlabs.append(value1.strftime('%d %b-%H:%M'))
                 rotation = 5
-            elif tmax-tmin > 3600.: # greater than an hour, show full seconds
+            elif tmax-tmin > 3600.:  # greater than an hour, show full seconds
                 newlabs.append(value1.strftime('%d %b-%H:%M:%S'))
                 rotation = 8
             else:
                 mcs = ('%.2f' % (value1.microsecond/10.**6)).replace('0.', '')
                 newlabs.append(value1.strftime('%H:%M:%S.') + mcs)
                 rotation = 0
-        ax.set_xticklabels(newlabs, fontsize=labelsize, ha="center", rotation=rotation) #, rotation=20)
+        ax.set_xticklabels(newlabs, fontsize=labelsize, ha="center", rotation=rotation)  # , rotation=20)
 
     if update is False:
-        plt.show()
+        plt.show(block=block)
     elif update is True:
         ax.figure.canvas.draw()
         if textbox is True:
@@ -1015,7 +1016,7 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
     :param yunits: string defining y units - units should be input time series units squared per Hz
     :param groupstations: only if recsec is True - if True, will plot all channels from same station on one plot
     """
-    import random
+
     st = Stream(st)  # in case it's a trace
     if detrend is not None:
         st.detrend(detrend)
@@ -1044,7 +1045,7 @@ def make_multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False, re
         if colors1 is not None:
             color = colors1[i]
         else:
-            color = random.rand(3, 1)
+            color = np.random.rand(3,)
         if recsec:
             ind = stas.index(st[i].stats.station)
             ax = axes[ind]
@@ -1193,8 +1194,8 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
             minP = maxP/1e6
             vmin = minP
             vmax = maxP
-            
-        print('Max power: %1.2e, Min power: %1.2e\n' % (maxP, minP))
+
+        print(('Max power: %1.2e, Min power: %1.2e\n' % (maxP, minP)))
 
         if log1 is True and minP is not None and maxP is not None:
             vmin = np.log10(minP)
@@ -1284,7 +1285,7 @@ class InteractivePlot:
     """
 
     def __init__(self, st, fig=None, indfirst=0, maxtraces=10, norm=True,
-                 xlim=None, ylim=None, scalfact=1.,cosfilt=(0.01, 0.02, 20, 30),
+                 xlim=None, ylim=None, scalfact=1., cosfilt=(0.01, 0.02, 20, 30),
                  water_level=60, output='VEL', textline=['>', '>', '>', '>', '>'],
                  menu=None, quickdraw=True, processing=None, taper=None,
                  tscale='relative', vlines=None,
@@ -1392,15 +1393,26 @@ class InteractivePlot:
         self.ylims = list(self.ax.get_ylim())
         self.connect()
 
+    def closed(self, evt):
+        """
+        disconnect and continue code
+        """
+        self.fig.canvas.mpl_disconnect(self.cidkey)
+        self.fig.canvas.mpl_disconnect(self.cidscroll)
+        self.fig.canvas.stop_event_loop()
+        print('Exiting interactive plotting')
+        self.print1 = ['>', '>', '>', '>', '>']
+
     def connect(self):
         """
-        connect to needed events, suspends code until connection is closed
+        connect to needed events, suspends code until figure is closed
         """
         self.cidkey = self.fig.canvas.mpl_connect('key_press_event', self.on_key)
         self.cidscroll = self.fig.canvas.mpl_connect('scroll_event', self.on_scroll)
         self.fig.canvas.mpl_disconnect(self.fig.canvas.manager.key_press_handler_id)  # turn off the automatic keys
-        print self.menu
-        self.fig.canvas.start_event_loop(timeout=-1)
+        print((self.menu))
+        self.fig.canvas.mpl_connect('close_event', self.closed)
+        self.fig.canvas.start_event_loop(timeout=6000)  # -1
 
     def disconnect(self):
         """
@@ -1409,6 +1421,7 @@ class InteractivePlot:
         self.fig.canvas.mpl_disconnect(self.cidkey)
         self.fig.canvas.mpl_disconnect(self.cidscroll)
         self.fig.canvas.stop_event_loop()
+        self.print1 = ['>', '>', '>', '>', '>']
 
     def on_key(self, event):
         """
@@ -1436,7 +1449,7 @@ class InteractivePlot:
             if self.numflag == 'F1':  # got two inputs so now apply bandpass filter
                 try:
                     self.input2 = float(self.number)
-                    print('Filtering current data between %1.2f and %1.2f Hz' % (self.input1, self.input2))
+                    print(('Filtering current data between %1.2f and %1.2f Hz' % (self.input1, self.input2)))
                     self.print1.append('> Filtering current data between %1.2f and %1.2f Hz' % (self.input1, self.input2))
                     self.number = ''
                     self.st_current.detrend('demean')
@@ -1522,7 +1535,7 @@ class InteractivePlot:
                                   figsize=figsize, vlines=self.vlines)
                 figprint.savefig(self.number+'.png', format='png')
                 plt.close(figprint)
-                print('figure %s saved' % self.number)
+                print(('figure %s saved' % self.number))
                 self.numflag = None
                 self.number = ''
 
@@ -1610,7 +1623,7 @@ class InteractivePlot:
             elif self.phasep == 'A':
                 self.aflag = 0
                 #find which station click was closest to
-                keyvals = self.fig.stationsy.keys()
+                keyvals = list(self.fig.stationsy.keys())
                 idx = np.absolute(event.ydata-np.array(keyvals)).argmin()
                 self.picksta = self.fig.stationsy[keyvals[idx]]
                 if event.xdata > self.picktime:
@@ -1683,7 +1696,7 @@ class InteractivePlot:
                             trace.remove_response(output=self.output, pre_filt=self.cosfilt,
                                                   water_level=self.water_level, taper=self.dotaper, taper_fraction=self.taper)
                         except:
-                            print 'Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)
+                            print(('Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)))
                             removeid.append(trace.id)
                     for rmid in removeid:  # Delete uncorrected ones
                         for tr in self.st_current.select(id=rmid):
@@ -1726,7 +1739,7 @@ class InteractivePlot:
             self.print1.append('> '+temp)
 
         if event.key.upper() == 'G':  # make spectrogram of current window - open in new fig
-            print 'Generating spectrogram of current window'
+            print('Generating spectrogram of current window')
             xlimtemp = self.ax.get_xlim()
             st_temp = self.st.copy()
             st_temp = st_temp.slice(self.tmin + xlimtemp[0], self.tmin + xlimtemp[1])
@@ -1749,7 +1762,7 @@ class InteractivePlot:
                 self.menu_print = None
             else:
                 self.menu_print = self.menu
-            print self.menu
+            print((self.menu))
             redraw = True
             #update = False
 
@@ -1793,7 +1806,7 @@ class InteractivePlot:
             elif self.phasep == 'L':
                 self.lflag = 0
                 #find which station click was closest to
-                keyvals = self.fig.stationsy.keys()
+                keyvals = list(self.fig.stationsy.keys())
                 idx = np.absolute(event.ydata-np.array(keyvals)).argmin()
                 self.picksta = self.fig.stationsy[keyvals[idx]]
                 self.picktime = [self.picktime, event.xdata]
@@ -1834,7 +1847,7 @@ class InteractivePlot:
         if event.key.upper() == 'O':  # delete trace and keep track of which ones were deleted and output it
             self.numflag = 'O'
             #find which station click was closest to
-            keyvals = self.fig.stationsy.keys()
+            keyvals = list(self.fig.stationsy.keys())
             idx = np.absolute(event.ydata-np.array(keyvals)).argmin()
             #staname = st1.stats.station+'.'+st1.stats.channel+'.'+st1.stats.network
             self.tempdelsta = self.fig.stationsy[keyvals[idx]]
@@ -1847,7 +1860,7 @@ class InteractivePlot:
             self.numflag = 'P'
             self.picktime = event.xdata
             #find which station click was closest to
-            keyvals = self.fig.stationsy.keys()
+            keyvals = list(self.fig.stationsy.keys())
             idx = np.absolute(event.ydata-np.array(keyvals)).argmin()
             self.picksta = self.fig.stationsy[keyvals[idx]]
             temp = ('assign weight and hit enter')
@@ -1884,7 +1897,7 @@ class InteractivePlot:
                 print(temp)
                 self.print1.append('> '+temp)
             except:
-                print 'cannot print timestamp - you may not be in the figure'
+                print('cannot print timestamp - you may not be in the figure')
 
         if event.key.upper() == 'U' and self.maxtraces < len(self.st):  # scroll up a trace
             self.indfirst = max(self.indfirst-1, 0)
@@ -2058,8 +2071,8 @@ def attach_distaz_IRIS(st, event_lat, event_lon):
             loc = trace.stats.location
         # build the url use to get station info from IRIS webservices
         url = ('http://service.iris.edu/fdsnws/station/1/query?net=%s&sta=%s&loc=%s&cha=%s&level=station&format=text&includecomments=true&nodata=404' % (trace.stats.network, trace.stats.station, loc, trace.stats.channel))
-        temp = urllib2.urlopen(url)
-        file1 = temp.read()
+        with urllib.request.urlopen(url) as temp:
+            file1 = temp.read().decode('utf-8')
         lines = [line.split('|') for line in file1.split('\n')[1:]]
         sta_lat = float(lines[0][2])
         sta_lon = float(lines[0][3])
@@ -2083,8 +2096,8 @@ def attach_coords_IRIS(st):
         else:
             loc = trace.stats.location
         url = ('http://service.iris.edu/fdsnws/station/1/query?net=%s&sta=%s&loc=%s&cha=%s&level=station&format=text&includecomments=true&nodata=404' % (trace.stats.network, trace.stats.station, loc, trace.stats.channel))
-        temp = urllib2.urlopen(url)
-        file1 = temp.read()
+        with urllib.request.urlopen(url) as temp:
+            file1 = temp.read().decode('utf-8')
         lines = [line.split('|') for line in file1.split('\n')[1:]]
         lat = float(lines[0][2])
         lon = float(lines[0][3])
@@ -2135,8 +2148,8 @@ def get_stations_iris(event_lat, event_lon, event_time, startbefore=None, minrad
     # build the url use to get station info from IRIS webservices
     url = ('http://service.iris.edu/fdsnws/station/1/query?latitude=%f&longitude=%f&minradius=%f&maxradius=%f&cha=%s&startbefore=%s&endafter=%s&level=channel&format=text&nodata=404'
            % (event_lat, event_lon, minradiuskm/111.32, maxradiuskm/111.32, chan, sttime, event_time.strftime('%Y-%m-%dT%H:%M:%S')))
-    temp = urllib2.urlopen(url)
-    file1 = temp.read()
+    with urllib.request.urlopen(url) as temp:
+        file1 = temp.read().decode('utf-8')
     lines = [line.split('|') for line in file1.split('\n')[1:]]
     source = 'IRIS'
     return lines, source
@@ -2152,8 +2165,8 @@ def get_stations_ncedc(event_lat, event_lon, event_time, minradiuskm=0., maxradi
     url = ('http://service.ncedc.org/fdsnws/station/1/query?latitude=%f&longitude=%f&minradius=%f&maxradius=%f&cha=%s&startbefore=%s&endafter=%s&level=channel&format=text&nodata=404'
            % (event_lat, event_lon, minradiuskm/111.32, maxradiuskm/111.32, chan, event_time.strftime('%Y-%m-%dT%H:%M:%S'),
               event_time.strftime('%Y-%m-%dT%H:%M:%S')))
-    temp = urllib2.urlopen(url)
-    file1 = temp.read()
+    with urllib.request.urlopen(url) as temp:
+        file1 = temp.read().decode('utf-8')
     lines = [line.split('|') for line in file1.split('\n')[1:]]
     source = 'NCEDC'
     return lines, source
@@ -2230,7 +2243,7 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
                 try:
                     trace.remove_response(output='ACC', pre_filt=cosfilt, water_level=water_level)
                 except:
-                    print 'Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)
+                    print(('Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)))
                     removeid.append(trace.id)
             for rmid in removeid:  # Delete uncorrected ones
                 for tr in stacc.select(id=rmid):
@@ -2250,7 +2263,7 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
                 try:
                     trace.remove_response(output='VEL', pre_filt=cosfilt, water_level=water_level)
                 except:
-                    print 'Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)
+                    print(('Failed to remove response for %s, deleting this station' % (trace.stats.station + trace.stats.channel,)))
                     removeid.append(trace.id)
             for rmid in removeid:  # Delete uncorrected ones
                 for tr in stvel.select(id=rmid):
@@ -2261,14 +2274,14 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
             trace.stats.gmparam['pga'] = np.abs(trace.max())  # in obspy, max gives the max absolute value of the data
             stvel[j].stats.gmparam['pga'] = np.abs(trace.max())
             if verbal is True:
-                print('%s - PGA = %1.3f m/s') % (trace.id, np.abs(trace.max()))
+                print((('%s - PGA = %1.3f m/s') % (trace.id, np.abs(trace.max()))))
 
     if pgv is True:
         for j, trace in enumerate(stvel):
             trace.stats.gmparam['pgv'] = np.abs(trace.max())
             stacc[j].stats.gmparam['pgv'] = np.abs(trace.max())
             if verbal is True:
-                print('%s - PGV = %1.3f m/s') % (trace.id, np.abs(trace.max()))
+                print((('%s - PGV = %1.3f m/s') % (trace.id, np.abs(trace.max()))))
 
     if psa is True:
         for j, trace in enumerate(stacc):
@@ -2287,7 +2300,7 @@ def getpeaks(st, pga=True, pgv=True, psa=True, periods=[0.3, 1.0, 3.0], damping=
                     psa1 = abs(min(dd))
                 out.append(psa1)
                 if verbal is True:
-                    print('%s - PSA at %1.1f sec = %1.3f m/s^2') % (trace.id, T, psa1)
+                    print((('%s - PSA at %1.1f sec = %1.3f m/s^2') % (trace.id, T, psa1)))
             trace.stats.gmparam['periods'] = periods
             trace.stats.gmparam['psa'] = out
             stvel[j].stats.gmparam['periods'] = periods
@@ -2320,6 +2333,7 @@ def unique_list(seq):  # make a list only contain unique values and keep their o
     seen_add = seen.add
     return [x for x in seq if not (x in seen or seen_add(x))]
 
+
 def fourier_spectra(st, win=None, nfft=None, powerspec=False, recsec=False, xlim=None):
     """
     Plot multitaper fourier amplitude spectra of signals in st
@@ -2331,18 +2345,17 @@ def fourier_spectra(st, win=None, nfft=None, powerspec=False, recsec=False, xlim
     :param xlim: tuple of xlims like (0., 100.)
     """
 
-    ###Should I have logx, logy as parameters? 
+    ###Should I have logx, logy as parameters?
     ###What about xunits? Won't it always be Freq? yunits?
     from sigproc import sigproc
     st = Stream(st)  # in case it's a trace
     st.detrend('demean')
 
-
     if recsec:
         fig, axes = plt.subplots(len(st), sharex=True, sharey=True, figsize=(10, 10))
     else:
         fig, ax = plt.subplots(1, figsize=(8, 5))
-   
+
     plt.suptitle('Time period: %s to %s' % (str(st[0].stats.starttime), str(st[0].stats.endtime)))
 
     for i, st1 in enumerate(st):
@@ -2350,15 +2363,15 @@ def fourier_spectra(st, win=None, nfft=None, powerspec=False, recsec=False, xlim
         dat = st1.data
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print 'Time window specified not compatible with length of time series'
+                print('Time window specified not compatible with length of time series')
                 return
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
             tvec = tvec[(tvec >= win[0]) & (tvec <= win[1])]
 
-        if nfft is None: 
+        if nfft is None:
             nfft = int(nextpow2((st1.stats.endtime - st1.stats.starttime) * st1.stats. sampling_rate))
-        st1.taper(max_percentage=0.05, type='cosine') 
-        # SHOULD I BE USING mtspec instead? And produce spec, freq like in make_multitaper??????
+        st1.taper(max_percentage=0.05, type='cosine')
+
         if powerspec is False:
             amps = np.abs(np.fft.rfft(dat, n=nfft))
             freqs = np.fft.rfftfreq(nfft, 1/st1.stats.sampling_rate)
@@ -2378,5 +2391,3 @@ def fourier_spectra(st, win=None, nfft=None, powerspec=False, recsec=False, xlim
             plt.title('Power Spectrum')
     ax.set_xlabel('Frequency (Hz)')
     plt.show()
-
-

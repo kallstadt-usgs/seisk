@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy.ma as ma
 import scipy.stats as ss
 from scipy.signal import periodogram
+import statsmodels.robust
 
 
 """
@@ -36,7 +37,7 @@ def domfreq(st, win=None):
         acc = np.diff(trace.data)*trace.stats.sampling_rate
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print 'Time window specified not compatible with length of time series'
+                print('Time window specified not compatible with length of time series')
                 return
             vel = vel[(tvec >= win[0]) & (tvec <= win[1])]
             acc = acc[(tvec >= win[0]) & (tvec <= win[1])]
@@ -63,7 +64,7 @@ def peakfreq(st, win=None):
         dat = trace.data
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print 'Time window specified not compatible with length of time series'
+                print('Time window specified not compatible with length of time series')
                 return
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
         freqs, amps = spectrum_manual(dat, tvec)
@@ -95,7 +96,7 @@ def meansqfreq(st, freqlim=(0, 25), win=None):
         dat = trace.data
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print 'Time window specified not compatible with length of time series'
+                print('Time window specified not compatible with length of time series')
                 return
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
         freqs, amps = spectrum_manual(dat, tvec)
@@ -128,13 +129,13 @@ def meansqfreqSN(st, stnoise, SNrat=1.5, freqlim=(0, 25), win=None):
     stnoise = Stream(stnoise)
     for i, trace in enumerate(st):
         if trace.stats.sampling_rate != stnoise[i].stats.sampling_rate:
-            print 'Signal and noise sample rates are different. Abort!'
+            print('Signal and noise sample rates are different. Abort!')
             return
         tvec = maketvec(trace)  # Time vector
         dat = trace.data
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print 'Time window specified not compatible with length of time series'
+                print('Time window specified not compatible with length of time series')
                 return
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
             trace = trace.trim(trace.stats.starttime+win[0], trace.stats.starttime+win[1])
@@ -174,7 +175,7 @@ def spectrumSN(st, stnoise, SNrat=1.5, win=None):
     ampmask = []
     for i, trace in enumerate(st):
         if trace.stats.sampling_rate != stnoise[i].stats.sampling_rate:
-            print 'Signal and noise sample rates are different. Abort!'
+            print('Signal and noise sample rates are different. Abort!')
             return
         tvec = maketvec(trace)  # Time vector
         dat = trace.data
@@ -183,7 +184,7 @@ def spectrumSN(st, stnoise, SNrat=1.5, win=None):
 
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print 'Time window specified not compatible with length of time series'
+                print('Time window specified not compatible with length of time series')
                 return
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
             trace = trace.trim(trace.stats.starttime+win[0], trace.stats.starttime+win[1])
@@ -212,7 +213,7 @@ def powspecSN(st, stnoise, SNrat=1.5, win=None):
     amps = list of np.arrays of amplitudes
     ampmaks = list of np.arrays of masked amplitudes
     """
-    import obspy.signal.spectral_estimation as spec
+    #import obspy.signal.spectral_estimation as spec
 
     st = Stream(st)  # turn into a stream object in case st is a trace
     stnoise = Stream(stnoise)
@@ -221,28 +222,30 @@ def powspecSN(st, stnoise, SNrat=1.5, win=None):
     ampmask = []
     for i, trace in enumerate(st):
         if trace.stats.sampling_rate != stnoise[i].stats.sampling_rate:
-            print 'Signal and noise sample rates are different. Abort!'
+            print('Signal and noise sample rates are different. Abort!')
             return
-        Fs = trace.stats.sampling_rate  # Time vector
+        #Fs = trace.stats.sampling_rate  # Time vector
         dat = trace.data
-        pFs = stnoise[i].stats.sampling_rate
+        #pFs = stnoise[i].stats.sampling_rate
         pdat = stnoise[i].data
         tvec = maketvec(trace)  # Time vector
 
         if win is not None:
             if win[1] > tvec.max() or win[0] < tvec.min():
-                print 'Time window specified not compatible with length of time series'
+                print('Time window specified not compatible with length of time series')
                 return
             dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
             trace = trace.trim(trace.stats.starttime+win[0], trace.stats.starttime+win[1])
         # Find max nfft of the two and use that for both so they line up
         maxnfft = np.max((nextpow2(len(dat)), nextpow2(len(pdat))))
-        Pxx, f = spec.psd(dat, NFFT=maxnfft, Fs=Fs)
-        pPxx, pf = spec.psd(pdat, NFFT=maxnfft, Fs=pFs)
-        idx = (Pxx/pPxx < SNrat)  # good values
-        amps.append(Pxx)
-        freqs.append(f)
-        ampmask.append(ma.array(Pxx, mask=idx))
+        Pxx, f = spectrum(trace, nfft=maxnfft, powerspec=True)
+        pPxx, pf = spectrum(stnoise[i], nfft=maxnfft, powerspec=True)
+        #Pxx, f = spec.psd(dat, NFFT=maxnfft, Fs=Fs)
+        #pPxx, pf = spec.psd(pdat, NFFT=maxnfft, Fs=pFs)
+        idx = (Pxx[0]/pPxx[0] < SNrat)  # good values
+        amps.append(Pxx[0])
+        freqs.append(f[0])
+        ampmask.append(ma.array(Pxx[0], mask=idx))
     return freqs, amps, ampmask
 
 
@@ -422,7 +425,7 @@ def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False,
     sample_int = tvec[1]-tvec[0]
     if win is not None:
         if win[1] > tvec.max() or win[0] < tvec.min():
-            print 'Time window specified not compatible with length of time series'
+            print('Time window specified not compatible with length of time series')
             return
         dat = dat[(tvec >= win[0]) & (tvec <= win[1])]
         tvec = tvec[(tvec >= win[0]) & (tvec <= win[1])]
@@ -523,7 +526,8 @@ def xcorrnorm(tr1, tr2, pad=True):
     cctemp = np.real(ifft(FFT1*np.conj(FFT2), n2))
     cc = cctemp/(norm1[0]*norm2[0])
     M = len(FFT1)
-    lags = np.roll(np.linspace(-M/2 + 1, M/2, M, endpoint=True), M/2 + 1).astype(int)
+    Mo2 = int(M/2)
+    lags = np.roll(np.linspace(-Mo2 + 1, Mo2, M, endpoint=True), Mo2 + 1).astype(int)
     indx = np.argmax(cc)
 
     maxcor = cc[indx]
@@ -594,10 +598,10 @@ def subsamplxcorr(tr1, tr2, shifts=None):
     maxcor, maxlag = subsamplxcorr(tr1, tr2, shifts=None)
     """
     if tr1.stats.sampling_rate != tr2.stats.sampling_rate:
-        print 'tr1 and tr2 have different sampling rates, abort'
+        print('tr1 and tr2 have different sampling rates, abort')
         return
     if len(tr1) != len(tr2):
-        print 'tr1 and tr2 are different lengths, abort'
+        print('tr1 and tr2 are different lengths, abort')
         return
 
     if shifts is None:
@@ -608,7 +612,7 @@ def subsamplxcorr(tr1, tr2, shifts=None):
     for shift in shifts:
         temp = tr2.copy()
         temp.data = fshift(tr2.data, shift)
-        maxcor, maxlag, dt = xcorrnorm(tr1, temp)
+        maxcor, maxlag, maxdt, cc, lags, tlags = xcorrnorm(tr1, temp)
         maxcors.append(maxcor)
     indx = np.array(maxcors).argmax()
     maxcor = maxcors[indx]
@@ -652,7 +656,6 @@ def findoutliers(arr, stdequiv=2):
     OUTPUTS:
     idx = indices of outliers
     """
-    import statsmodels.robust
     mad = statsmodels.robust.mad(arr)
     z = np.abs((arr-np.median(arr))/mad)
     if stdequiv == 3:

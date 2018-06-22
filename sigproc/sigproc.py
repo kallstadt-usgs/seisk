@@ -16,14 +16,20 @@ Kate Allstadt - kallstadt@usgs.gov
 """
 
 
-def domfreq(st, win=None):
+def domfreq(st, winstarts=None, winends=None):
     """
-    Calculate the dominant frequency of a time series using Douma and Sneider (2006) definition, which is equivalent to a weighted mean, and estimate the variance using the weighted variance formula (amplitudes are weights)
+    Calculate the dominant frequency of a time series using Douma and Sneider (2006) definition,
+    which is equivalent to a weighted mean, and estimate the variance using the weighted variance
+    formula (amplitudes are weights)
+
     USAGE
     fd = domfreq(st, win=None)
+
     INPUTS
     st = obspy stream object, or trace object
-    win = tuple of time window in seconds (e.g. win=(3., 20.)) over which to compute dominant frequency, None computes for entire time window
+    winstarts = list of window start times in seconds (e.g. win=(3., 20.)) over which to compute dominant
+        frequency, None computes for entire time window.
+    winends = list of window end times
     OUTPUTS
     fd = numpy array of dominant frequencies (Hz)
     """
@@ -35,14 +41,17 @@ def domfreq(st, win=None):
         tvec = maketvec(trace)[:-1]  # Time vector
         vel = trace.data[:-1]
         acc = np.diff(trace.data)*trace.stats.sampling_rate
-        if win is not None:
-            if win[1] > tvec.max() or win[0] < tvec.min():
-                print('Time window specified not compatible with length of time series')
-                return
-            vel = vel[(tvec >= win[0]) & (tvec <= win[1])]
-            acc = acc[(tvec >= win[0]) & (tvec <= win[1])]
-            tvec = tvec[(tvec >= win[0]) & (tvec <= win[1])]
-        fd[i] = (np.sqrt(np.trapz(acc**2, tvec)/np.trapz(vel**2, tvec)))/(2*np.pi)
+        if winstarts is not None:
+            temps = []
+            for ws, we in zip(winstarts, winends):
+                if we > np.max(tvec) or ws < np.min(tvec):
+                    print('Time window specified not compatible with length of time series, entering nan')
+                    temps.append(float('nan'))
+                vel = vel[(tvec >= ws) & (tvec <= we)]
+                acc = acc[(tvec >= ws) & (tvec <= we)]
+                tvec = tvec[(tvec >= ws) & (tvec <= we)]
+                temps.append(np.sqrt(np.trapz(acc**2, tvec)/np.trapz(vel**2, tvec)))/(2*np.pi)
+            fd[i] = temps
     return fd
 
 
@@ -146,7 +155,7 @@ def meansqfreqSN(st, stnoise, SNrat=1.5, freqlim=(0, 25), win=None):
         # Find max nfft of the two and use that for both so they line up
         maxnfft = np.max((nextpow2(len(dat)), nextpow2(len(pdat))))
         freqs, amps = spectrum_manual(dat, tvec, nfft=maxnfft)
-        pfreqs, pamps = spectrum_manual(pdat, ptvec, nfft=maxnfft)
+        _, pamps = spectrum_manual(pdat, ptvec, nfft=maxnfft)
         idx = (amps/pamps > SNrat) & (freqs >= freqlim[0]) & (freqs <= freqlim[1])  # indices of good values
         Cis = amps[idx]
         freqs1 = freqs[idx]
@@ -191,7 +200,7 @@ def spectrumSN(st, stnoise, SNrat=1.5, win=None):
         # Find max nfft of the two and use that for both so they line up
         maxnfft = np.max((nextpow2(len(dat)), nextpow2(len(pdat))))
         freqs1, amps1 = spectrum_manual(dat, tvec, nfft=maxnfft)
-        pfreqs1, pamps1 = spectrum_manual(pdat, ptvec, nfft=maxnfft)
+        _, pamps1 = spectrum_manual(pdat, ptvec, nfft=maxnfft)
         idx = (amps1/pamps1 < SNrat)  # good values
         amps.append(amps1)
         freqs.append(freqs1)
@@ -239,7 +248,7 @@ def powspecSN(st, stnoise, SNrat=1.5, win=None):
         # Find max nfft of the two and use that for both so they line up
         maxnfft = np.max((nextpow2(len(dat)), nextpow2(len(pdat))))
         Pxx, f = spectrum(trace, nfft=maxnfft, powerspec=True)
-        pPxx, pf = spectrum(stnoise[i], nfft=maxnfft, powerspec=True)
+        pPxx, _ = spectrum(stnoise[i], nfft=maxnfft, powerspec=True)
         #Pxx, f = spec.psd(dat, NFFT=maxnfft, Fs=Fs)
         #pPxx, pf = spec.psd(pdat, NFFT=maxnfft, Fs=pFs)
         idx = (Pxx[0]/pPxx[0] < SNrat)  # good values
@@ -270,7 +279,7 @@ def multitaper(st, number_of_tapers=None, time_bandwidth=4., sine=False):
 
     amps = []
     freqs = []
-    for i, st1 in enumerate(st):
+    for st1 in st:
         if sine is False:
             nfft = int(nextpow2((st1.stats.endtime - st1.stats.starttime) * st1.stats.sampling_rate))
             amp, freq = mtspec(st1.data, 1./st1.stats.sampling_rate, time_bandwidth=time_bandwidth,
@@ -312,7 +321,7 @@ def multitaperSN(st, stnoise, SNrat=1.5, time_bandwidth=4.):
         # Find max nfft of the two and use that for both so they line up
         maxnfft = int(np.max((nextpow2(len(dat)), nextpow2(len(pdat)))))
         amp, freq = mtspec(dat, 1./st1.stats.sampling_rate, time_bandwidth=time_bandwidth, nfft=maxnfft)
-        pamp, pfreq = mtspec(pdat, 1./st1.stats.sampling_rate, time_bandwidth=time_bandwidth, nfft=maxnfft)
+        pamp, _ = mtspec(pdat, 1./st1.stats.sampling_rate, time_bandwidth=time_bandwidth, nfft=maxnfft)
         idx = (amp/pamp < SNrat)  # good values
         amps.append(amp)
         freqs.append(freq)
@@ -359,7 +368,7 @@ def kurtosis(st, winlen, BaillCF=False):
             F3 = np.zeros(len(kurtos))
             for j in range(1, len(kurtos)):
                 F3[j] = F2[j]-((a*(j-1))+b)
-            [M, mintab] = peakdet(F3, (np.max(F3)-np.min(F3))/100.)
+            [M, _] = peakdet(F3, (np.max(F3)-np.min(F3))/100.)
             F4 = np.zeros(len(kurtos))
             indx = M[1:-1, 0]
             # This takes a long time - figure out why
@@ -472,7 +481,6 @@ def nextpow2(val):
     import math
     temp = math.floor(math.log(val, 2))
     return int(math.pow(2, temp+1))
-    pass
 
 
 def xcorrnorm(tr1, tr2, pad=True):
@@ -502,7 +510,7 @@ def xcorrnorm(tr1, tr2, pad=True):
     from scipy.fftpack import fft, ifft
     if tr1.stats.sampling_rate != tr2.stats.sampling_rate:
         raise RuntimeError('tr1 and tr2 have different sampling rates')
-        return
+
     # make sure data is float
     dat1 = tr1.data*1.
     dat2 = tr2.data*1.
@@ -515,7 +523,7 @@ def xcorrnorm(tr1, tr2, pad=True):
                 dat1 = np.lib.pad(dat1, (0, len(dat2)-len(dat1)), 'constant', constant_values=(0., 0.))
         else:
             raise RuntimeError('tr1 and tr2 are different lengths, set pad=True if you want to proceed')
-            return
+
     # pad data to double number of samples to avoid wrap around and pad more to next closest power of 2 for fft
     n2 = nextpow2(len(dat1))
 
@@ -545,7 +553,7 @@ def templateXcorr(datastream, template):
     """
     if datastream.stats.sampling_rate != template.stats.sampling_rate:
         raise RuntimeError('tr1 and tr2 have different sampling rates')
-        return
+
     # make sure data is float
     y = datastream.data*1.
     x = template.data*1.
@@ -555,7 +563,7 @@ def templateXcorr(datastream, template):
 
     if len(y) < len(x):
         raise RuntimeError('your template is longer than your datastream')
-        return
+
 
     xy = np.correlate(y, x, 'valid')
     x2 = np.sum(x**2.)
@@ -612,7 +620,7 @@ def subsamplxcorr(tr1, tr2, shifts=None):
     for shift in shifts:
         temp = tr2.copy()
         temp.data = fshift(tr2.data, shift)
-        maxcor, maxlag, maxdt, cc, lags, tlags = xcorrnorm(tr1, temp)
+        maxcor, maxlag, _, _, _, _ = xcorrnorm(tr1, temp)
         maxcors.append(maxcor)
     indx = np.array(maxcors).argmax()
     maxcor = maxcors[indx]

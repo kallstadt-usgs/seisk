@@ -81,6 +81,13 @@ And remove the seisk folder that was cloned in step 3.
 * Ensure that miniconda is in your user directory or somewhere that does not
     require admin permissions.
 
+* If the entire virtual environment installation failed (install.sh), try running the following lines from within the top level of the seisk folder:
+```
+conda env create -f environment.yml --force
+conda activate seisk
+pip install -e .
+```
+
 ### Install just this package and install dependencies separately
 
 #### Initial install

@@ -87,7 +87,7 @@ def getdata(network, station, location, channel, starttime, endtime, attach_resp
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = eval(input('file already exists for this time period, enter Y to load from file, N to reload\n'))
+                choice = input('file already exists for this time period, enter Y to load from file, N to reload\n')
             else:
                 choice = 'N'
     else:
@@ -202,7 +202,7 @@ def getdata_exact(stations, starttime, endtime, attach_response=True, clientname
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = eval(input('file already exists for this time period, enter Y to load from file, N to reload\n'))
+                choice = input('file already exists for this time period, enter Y to load from file, N to reload\n')
             else:
                 choice = 'N'
     else:
@@ -321,7 +321,7 @@ def getdata_winston(stations, starttime, endtime, ewclientname, port, chanuse='*
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = eval(input('file already exists for this time period, enter Y to load from file, N to reload\n'))
+                choice = input('file already exists for this time period, enter Y to load from file, N to reload\n')
             else:
                 choice = 'N'
     else:
@@ -432,8 +432,8 @@ def getdata_filenames(filenames, chanuse='*', starttime=None, endtime=None,
             choice = 'Y'
         else:
             if reloadfile is False:
-                choice = eval(input('file already exists for this time period, \
-                                   enter Y to load from file, N to reload\n'))
+                choice = input('file already exists for this time period, \
+                                enter Y to load from file, N to reload\n')
             else:
                 choice = 'N'
     else:
@@ -884,7 +884,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
         i += 1
     if missing == len(st):
         print('nothing to see over here, go back')
-    plt.tick_params(left='off', right='off')
+    plt.tick_params(left=False, right=False)
     plt.tick_params(axis='both', which='major', labelsize=12)
 
     plt.autoscale(enable=True, axis='y', tight=True)
@@ -902,7 +902,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
     else:
         ax.set_ylim(miny, maxy)
     if grid:
-        plt.grid('on')
+        plt.grid(True)
 
     mcs = ('%.2f' % (tmin.microsecond/10.**6)).replace('0.', '')
     timeprint = tmin.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
@@ -1121,9 +1121,9 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
     """
     Plot spectrogram (opens new figure)
     USAGE
-    fig, axes = make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, wlen=None,
-                     overperc=0.85, log1=True, maxPower=1000000, minPower=1, freqmax=25,
-                     colorb=False)
+    fig, axes = make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, wlen=None, norm=True,
+                     overperc=0.85, log1=True, maxPower=None, minPower=None, freqmax=None,
+                     colorb=False, labelsize=12, figsize=None, render=True)
     INPUTS
     st = obspy stream containing data to plot
     detrend = type of detrending to use from matplotlib mlab commands (mlab.detrend_linear, mlab.detrend_mean, or mlab.dtrend_none)
@@ -1178,16 +1178,18 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
         minP = None
         maxP = None
 
-        if norm:
+        if norm or maxPower is not None:
             if maxPower is None:
                 maxP = np.abs(st1.max())**2.
                 vmax = maxP
             else:
+                maxP = maxPower
                 vmax = None
             if minPower is None:
                 minP = maxP/1e6
                 vmin = minP
             else:
+                minP = minPower
                 vmin = None
         else:
             maxP = np.max(np.abs(st.max()))**2.
@@ -1317,7 +1319,7 @@ class InteractivePlot:
         self.picks = {}
         self.init = 0
         self.st_original = st.copy()
-        self.st = st
+        self.st = st.copy()
         self.st_current = st.copy()
         self.st_last = st.copy()
         self.tempdelsta = None  # hold station to delete until it's confirmed
@@ -1724,7 +1726,7 @@ class InteractivePlot:
             redraw = True
 
         if event.key.upper() == 'E':  # make envelopes of whatever is current data
-            for i, junk in enumerate(self.st):
+            for i, _ in enumerate(self.st):
                 self.st_current[i].data = filte.envelope(self.st_current[i].data)
             redraw = True
             self.env = True
@@ -2054,7 +2056,6 @@ def nextpow2(val):
     import math
     temp = math.floor(math.log(val, 2))
     return int(math.pow(2, temp+1))
-    pass
 
 
 def attach_distaz_IRIS(st, event_lat, event_lon):
@@ -2347,7 +2348,7 @@ def fourier_spectra(st, win=None, nfft=None, powerspec=False, recsec=False, xlim
 
     ###Should I have logx, logy as parameters?
     ###What about xunits? Won't it always be Freq? yunits?
-    from sigproc import sigproc
+
     st = Stream(st)  # in case it's a trace
     st.detrend('demean')
 

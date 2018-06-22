@@ -2,7 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from . import sigproc
+from sigproc import sigproc
 import obspy.signal.array_analysis as aa  # array_transff_freqslowness, array_transff_wavenumber, array_processing, get_geometry, get_timeshift, get_spoint, get_geometry
 from obspy.signal.util import util_geo_km, next_pow_2
 from obspy import UTCDateTime, Stream
@@ -454,7 +454,7 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh,
         # transform to radian
         baz2 = np.radians(baz2)
 
-        x, y = np.meshgrid(xgrid, ygrid)
+        #x, y = np.meshgrid(xgrid, ygrid)
 
         #pow_map_mean = np.array((x, y))
         findind = 0
@@ -488,7 +488,7 @@ def beamform_plane(st, sll_x, slm_x, sll_y, slm_y, sstep, freqlow, freqhigh,
             ColorbarBase(cax, cmap=cmap, norm=Normalize(vmin=0.0, vmax=1.))
             ax1 = fig.add_axes([0.37, 0.05, 0.58, 0.9])
             tvec = sigproc.maketvec(stfilt[0])
-            #import pdb; pdb.set_trace()
+
             ax1.plot(tvec, stfilt[0].data/max(stfilt[0].data), 'k', label=stfilt[0].stats.station)
             ax1.plot(tvec, stfilt[1].data/max(stfilt[1].data) + 1.5, 'k', label=stfilt[1].stats.station)
             ax1.plot(tvec, stfilt[2].data/max(stfilt[2].data) + 3., 'k', label=stfilt[2].stats.station)
@@ -627,7 +627,7 @@ def backproject(st, v, tshifts, freqmin, freqmax, winlen, overlap, gridx, gridy,
                 #indx = np.where((freqs >= freqmin) & (freqs <= freqmax))
                 extract[k, :] = y[(freqs >= freqmin) & (freqs <= freqmax)]
                 extractnon[k, :] = ynon[(freqs >= freqmin) & (freqs <= freqmax)]
-                #import pdb;pdb.set_trace()
+
                 k += 1
                 # extract mean beam power over this frequency range and add to cumulative total for this point
             power[i, n, :] = ((1./nsta) * np.abs(np.sum(extract, 0)))**2

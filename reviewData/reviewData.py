@@ -97,7 +97,8 @@ def getdata(network, station, location, channel, starttime, endtime, attach_resp
     else:
         try:
             client = FDSN_Client(clientname)
-            st = client.get_waveforms(network.strip(' '), station, location, channel,
+            st = client.get_waveforms(network.replace(' ', ''), station.replace(' ', ''),
+                                      location.replace(' ', ''), channel.replace(' ', ''),
                                       starttime, endtime, attach_response=True)
             # if any have integer data, turn into float
             for tr in st:
@@ -638,7 +639,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
            labelquickdraw=True, processing=None, figsize=None, colors=None,
            labelsize=12., addscale=False, unitlabel=None, convert=1.,
            scaleperc=0.9, vlines=None, vlinestyle='--', vlinecolor='k',
-           pad=False, fill_value=0., xonly=False, samezero=False, grid=True,
+           picktimes=None, pad=False, fill_value=0., xonly=False, samezero=False, grid=True,
            title=True, labellist=None, labelloc='left', block=False):
     """Plot record section of data from an obspy stream
 
@@ -686,6 +687,8 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
             should be placed (e.g. to show event start times)
         vlinestyle (str): vline style shortcut e.g. '--'
         vlinecolor (str): vline color shortcut e.g. 'k'
+        picktimes: None or array of obspy UTCDateTimes of pick times to plot on each
+            trace corresponding to and in the same order as the stream
         pad (bool): whether to pad traces so they are all the same length
         fill_value (float or int): fill value to pad with, if None, will create
             masked array, which may present challenges to further processing the data
@@ -725,34 +728,40 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
         rep = rep[0:len(st)]
     else:
         rep = colors
+        
+    if fighandle is not None:
+        #try:
+        fig = fighandle
+        if textbox is True:
+            axbox, ax = fig.get_axes()
+            boxes = ax.texts
+            for b in boxes:
+                b.remove()
+        else:
+            ax = fig.get_axes()
+        #except:
+        #    print('need to define fighandle correctly to update current plot, creating new figure')
+        #    update = False
 
-    if update is True and fighandle is not None:
-        try:
-            fig = fighandle
-            if textbox is True:
-                axbox, ax = fig.get_axes()
-                boxes = ax.texts
-                for b in boxes:
-                    b.remove()
-            else:
-                ax = fig.get_axes()
-        except:
-            print('need to define fighandle correctly to update current plot, creating new figure')
-            update = False
-    elif update is True and fighandle is None:
+    if update is True and fighandle is None:
         print('Cannot update without specifying a figure handle, creating new figure')
         update = False
 
     if update is False:
-        if figsize is None:
-            fig = plt.figure(figsize=(12, min(10, 3*len(st))))
+        if fighandle is not None:
+            ax.clear()
+            if textbox is True:
+                axbox.clear()
         else:
-            fig = plt.figure(figsize=figsize)
-        if textbox is True:
-            axbox = fig.add_axes([0.2, 0.05, 0.75, 0.1])
-            ax = fig.add_axes([0.2, 0.23, 0.75, 0.72])  # left bottom width height
-        else:
-            ax = fig.add_axes([0.23, 0.13, 0.72, 0.78])
+            if figsize is None:
+                fig = plt.figure(figsize=(12, min(10, 3*len(st))))
+            else:
+                fig = plt.figure(figsize=figsize)
+            if textbox is True:
+                axbox = fig.add_axes([0.2, 0.05, 0.75, 0.1])
+                ax = fig.add_axes([0.2, 0.23, 0.75, 0.72])  # left bottom width height
+            else:
+                ax = fig.add_axes([0.23, 0.13, 0.72, 0.78])
 
     if labellist is None:
         labels = []
@@ -848,6 +857,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
                             horizontalalignment='left', verticalalignment='center')
                     ax.text(xerrloc, yloc - 0.5, label1, color='0.5', fontsize=11,
                             horizontalalignment='left', verticalalignment='bottom')
+
             else:
                 yloc = -2.*avgmax*i
                 dat = scalfact*dat
@@ -955,6 +965,25 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
     if vlines is not None:
         for vlin in vlines:
             ax.axvline(vlin - tmin, linestyle=vlinestyle, color=vlinecolor)
+
+    if picktimes is not None:
+        try:  # Get the right picktimes for current display
+            picktimes2 = picktimes[indfirst:indfirst+maxtraces]
+            # Get avg distance between lines
+            ht = np.abs(np.mean(np.diff(yticks1)))/2.
+            for pick, yloc1 in zip(picktimes2, yticks1):
+                if isinstance(pick, UTCDateTime):
+                    xloc1 = pick - tmin
+                else: # must be in seconds from record start time
+                    xloc1 = pick
+                ax.plot([xloc1, xloc1], [yloc1-ht, yloc1+ht], color='0.0013',
+                        linestyle='-', linewidth=1.65, zorder=1.e10)
+                #ax.vlines(x=xloc1, ymin=yloc1-ht, ymax=yloc1+ht, color='0.0013',
+                #          linestyle='-', linewidth=1.8, zorder=1.e10)
+                #ax.errorbar(xloc1, yloc1, yerr=ht, color='k', linestyle='-', zorder=1.e10)
+        except:
+            print('picktimes array needs to be same length as input stream, skipping')
+
 
     props1 = dict(facecolor='white', alpha=1)
     if labelquickdraw:
@@ -1290,12 +1319,17 @@ class InteractivePlot:
                  xlim=None, ylim=None, scalfact=1., cosfilt=(0.01, 0.02, 20, 30),
                  water_level=60, output='VEL', textline=['>', '>', '>', '>', '>'],
                  menu=None, quickdraw=True, processing=None, taper=None,
-                 tscale='relative', vlines=None,
+                 tscale='relative', vlines=None, picktimes=None,
                  specg = {'detrend': mlab.detrend_linear, 'wlen': None, 'norm': True, 'overperc': 0.85, 'log1': True,
                           'maxPower': None, 'minPower': None, 'freqmax': None}):
         """
         Initializes the class with starting values
         """
+        try:
+            self.reset  # reset the class each time it's initialized
+        except:
+            pass  # New instance
+        
         self.ind = 0  # index for current zoom position
         self.zflag = 0  # index used for zooming
         self.azflag = 0  # index used for box zoomming
@@ -1329,6 +1363,7 @@ class InteractivePlot:
         self.tmax = max([trace.stats.starttime for trace in st])
         self.print1 = textline
         self.menu_print = menu
+        self.processing = processing
         self.processing_print = processing
         self.env = False  # whether plot is an envelope or not
         self.quickdraw = quickdraw
@@ -1336,6 +1371,8 @@ class InteractivePlot:
         self.tscale = tscale
         self.specg = specg
         self.vlines = vlines
+        self.picktimes = list(picktimes)
+        self.picktimes_original = list(picktimes.copy())
         if taper is not None:
             if 60/(self.tmax-self.tmin) > 0.05:
                 self.taper = 60./(self.tmax-self.tmin)  # Taper on first minute if the signal length is really long
@@ -1381,12 +1418,12 @@ class InteractivePlot:
         if fig is None:
             self.fig = recsec(self.st_current, xlim=xlim,
                               ylim=ylim, scalfact=self.scalfact,
-                              update=False, fighandle=[], tscale=self.tscale,
+                              update=False, fighandle=None, tscale=self.tscale,
                               norm=self.normflag, indfirst=self.indfirst,
                               maxtraces=self.maxtraces, textline=self.print1,
                               menu=self.menu_print, processing=self.processing_print,
                               textbox=True, quickdraw=self.quickdraw,
-                              vlines=self.vlines)
+                              vlines=self.vlines, picktimes=self.picktimes)
         else:
             self.fig = fig
         self.axbox = self.fig.get_axes()[0]
@@ -1434,7 +1471,7 @@ class InteractivePlot:
         update = True
         #xlims = np.sort(self.xlims[-2:])
         ylims = None
-
+        
         if event.xdata is None:
             temp = 'The recsec plot may not be active, click on figure and move it slightly to make it active and try again'
             event.key = '.'
@@ -1534,7 +1571,7 @@ class InteractivePlot:
                                   maxtraces=self.maxtraces, tscale=self.tscale,
                                   menu=None, processing=None,
                                   quickdraw=False, textbox=False,
-                                  figsize=figsize, vlines=self.vlines)
+                                  figsize=figsize, vlines=self.vlines, picktimes=self.picktimes)
                 figprint.savefig(self.number+'.png', format='png')
                 plt.close(figprint)
                 print(('figure %s saved' % self.number))
@@ -1730,7 +1767,7 @@ class InteractivePlot:
                 self.st_current[i].data = filte.envelope(self.st_current[i].data)
             redraw = True
             self.env = True
-            temp = ('Opening new window showing current data as envelopes')
+            temp = ('Showing envelopes, press X to reset')
             print(temp)
             self.print1.append('> '+temp)
 
@@ -1772,7 +1809,7 @@ class InteractivePlot:
             if self.processing_print is not None:
                 self.processing_print = None
             else:
-                self.processing_print = self.menu
+                self.processing_print = self.processing
             redraw = True
             #update = False
 
@@ -1920,6 +1957,8 @@ class InteractivePlot:
 
         if event.key.upper() == 'X':  # reset current data to original data
             self.st_current = self.st_original.copy()
+            if self.picktimes is not None:
+                self.picktimes = self.picktimes_original.copy()
             temp = 'resetting to original data'
             print(temp)
             self.print1.append('> '+temp)
@@ -1947,10 +1986,13 @@ class InteractivePlot:
                     self.tempdelsta = None
                     self.st_current.pop(i)
                     self.st.pop(i)
+                    if self.picktimes is not None:
+                        self.picktimes.pop(i)
                     temp = ('%s deleted, press x to reset data' % (self.deleted[-1],))
                     print(temp)
                     self.print1.append('> '+temp)
                     redraw = True
+                    #update = False
 
         if event.key.upper() == 'N' and self.numflag == 'PW':
             temp = 'deleting pick'
@@ -2016,13 +2058,24 @@ class InteractivePlot:
         self.st_last = self.st_current.copy()
 
         if redraw is True:
+            #self.ax.clear()
+            if self.picktimes is not None:
+                # delete the previous lines
+                templi = self.ax.lines
+                indx5 = []
+                for i, li in enumerate(templi):
+                    if li.get_linewidth() == 1.65:
+                        indx5.append(i)
+                for i5 in indx5[::-1]:
+                    templi[i5].remove()
+
             self.fig = recsec(self.st_current, xlim=np.sort(self.xlims[-2:]),
                               ylim=ylims, scalfact=self.scalfact,
                               update=update, fighandle=self.fig, tscale=self.tscale,
                               norm=self.normflag, indfirst=self.indfirst,
                               maxtraces=self.maxtraces, textline=self.print1, textbox=True,
                               menu=self.menu_print, processing=self.processing_print,
-                              quickdraw=self.quickdraw, vlines=self.vlines)
+                              quickdraw=self.quickdraw, vlines=self.vlines, picktimes=self.picktimes)
 
     def on_scroll(self, event):
         """
@@ -2038,7 +2091,7 @@ class InteractivePlot:
                                   fighandle=self.fig, norm=self.normflag,
                                   indfirst=self.indfirst, maxtraces=self.maxtraces,
                                   textline=self.print1, menu=self.menu_print,
-                                  textbox=True, vlines=self.vlines)
+                                  textbox=True, vlines=self.vlines, picktimes=self.picktimes)
             elif event.button == 'up':  # go back up to view other traces
                 self.indfirst = max(self.indfirst-1, 0)
                 self.fig, = recsec(self.st_current, xlim=np.sort(self.xlims[-2:]),
@@ -2046,7 +2099,7 @@ class InteractivePlot:
                                    norm=self.normflag, indfirst=self.indfirst, tscale=self.tscale,
                                    maxtraces=self.maxtraces, textline=self.print1,
                                    menu=self.menu_print, textbox=True,
-                                   vlines=self.vlines)
+                                   vlines=self.vlines, picktimes=self.picktimes)
 
 
 def nextpow2(val):

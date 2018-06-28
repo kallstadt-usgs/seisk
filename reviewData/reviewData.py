@@ -17,7 +17,7 @@ from textwrap import wrap
 import urllib
 from scipy.stats import mode
 from sigproc import sigproc
-
+import matplotlib
 
 """Functions built around obspy for conveniently downloading and interacting with seismic data
 
@@ -728,7 +728,7 @@ def recsec(st, norm=True, xlim=None, ylim=None, scalfact=1., tscale='relative',
         rep = rep[0:len(st)]
     else:
         rep = colors
-        
+
     if fighandle is not None:
         #try:
         fig = fighandle
@@ -1329,7 +1329,7 @@ class InteractivePlot:
             self.reset  # reset the class each time it's initialized
         except:
             pass  # New instance
-        
+
         self.ind = 0  # index for current zoom position
         self.zflag = 0  # index used for zooming
         self.azflag = 0  # index used for box zoomming
@@ -1371,8 +1371,12 @@ class InteractivePlot:
         self.tscale = tscale
         self.specg = specg
         self.vlines = vlines
-        self.picktimes = list(picktimes)
-        self.picktimes_original = list(picktimes.copy())
+        if picktimes is not None:
+            self.picktimes = list(picktimes)
+            self.picktimes_original = list(picktimes.copy())
+        else:
+            self.picktimes = None
+            self.picktimes_original = None
         if taper is not None:
             if 60/(self.tmax-self.tmin) > 0.05:
                 self.taper = 60./(self.tmax-self.tmin)  # Taper on first minute if the signal length is really long
@@ -1452,6 +1456,10 @@ class InteractivePlot:
         print((self.menu))
         self.fig.canvas.mpl_connect('close_event', self.closed)
         self.fig.canvas.start_event_loop(timeout=6000)  # -1
+        try:
+            self.fig.canvas.manager.window.raise_()
+        except:
+            print('Using %s backend, interactive plotting may not work. Must use Qt backend' % matplotlib.get_backend())
 
     def disconnect(self):
         """
@@ -1471,7 +1479,7 @@ class InteractivePlot:
         update = True
         #xlims = np.sort(self.xlims[-2:])
         ylims = None
-        
+
         if event.xdata is None:
             temp = 'The recsec plot may not be active, click on figure and move it slightly to make it active and try again'
             event.key = '.'
@@ -2076,6 +2084,11 @@ class InteractivePlot:
                               maxtraces=self.maxtraces, textline=self.print1, textbox=True,
                               menu=self.menu_print, processing=self.processing_print,
                               quickdraw=self.quickdraw, vlines=self.vlines, picktimes=self.picktimes)
+
+        try:
+            self.fig.canvas.manager.window.raise_()
+        except:
+            print('could not raise window automatically, you must make the figure window active manually')
 
     def on_scroll(self, event):
         """

@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from obspy.clients.fdsn import Client as FDSN_Client
 from obspy.clients.earthworm import Client as ew_client
 from obspy.signal.invsim import simulate_seismometer, corn_freq_2_paz
-from obspy import UTCDateTime
+from obspy import UTCDateTime, Inventory
 import numpy as np
 import obspy.signal.filter as filte
 from obspy.core import AttribDict
@@ -2199,6 +2199,36 @@ def pyproj_distaz(lat1, lon1, lat2, lon2, ellps='WGS84'):
     if az21 < 0:
         az21 = 360+az21
     return az12, az21, dist
+
+
+def get_stations(event_lat, event_lon, event_time, clients=['IRIS'], minradiuskm=0., maxradiuskm=25,
+                 chan='BH?,EH?,HH?,BDF', level='channel', startbefore=None, **kwargs):
+    """
+    Wrapper around obspy get_stations function
+    http://service.iris.edu/fdsnws/station/1/
+    Can use ? wildcards in the channel designators, write whole channel list as one string
+    startbefore = optional start time in case you want to use a different startbefore time than the event_time
+    kwargs = any additional arguments from https://docs.obspy.org/packages/autogen/obspy.clients.fdsn.client.Client.get_stations.html
+
+    Returns:
+        station inventory
+    """
+    if startbefore is None:
+        sttime = event_time.strftime('%Y-%m-%dT%H:%M:%S')
+    else:
+        sttime = startbefore.strftime('%Y-%m-%dT%H:%M:%S')
+    inventory = None
+    for client in clients:
+        client1 = FDSN_Client(client)
+        inv = client1.get_stations(latitude=event_lat, longitude=event_lon, starttime=sttime,
+                                   minradius=minradiuskm/111.32, maxradius=maxradiuskm/111.32,
+                                   channel=chan, level=level, **kwargs)
+        if inventory is None:
+            inventory = inv
+        else:
+            inventory += inv
+
+    return inventory
 
 
 def get_stations_iris(event_lat, event_lon, event_time, startbefore=None, minradiuskm=0., maxradiuskm=25, chan=('BH?,EH?,HH?,BDF')):

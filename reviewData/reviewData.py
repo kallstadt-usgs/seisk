@@ -2202,7 +2202,7 @@ def pyproj_distaz(lat1, lon1, lat2, lon2, ellps='WGS84'):
 
 
 def get_stations(event_lat, event_lon, event_time, clients=['IRIS'], minradiuskm=0., maxradiuskm=25,
-                 chan='BH?,EH?,HH?,BDF', level='channel', startbefore=None, **kwargs):
+                 chan='BH?,EH?,HH?,BDF', level='channel', **kwargs):
     """
     Wrapper around obspy get_stations function
     http://service.iris.edu/fdsnws/station/1/
@@ -2213,15 +2213,12 @@ def get_stations(event_lat, event_lon, event_time, clients=['IRIS'], minradiuskm
     Returns:
         station inventory
     """
-    if startbefore is None:
-        sttime = event_time.strftime('%Y-%m-%dT%H:%M:%S')
-    else:
-        sttime = startbefore.strftime('%Y-%m-%dT%H:%M:%S')
     inventory = None
     for client in clients:
         client1 = FDSN_Client(client)
-        inv = client1.get_stations(latitude=event_lat, longitude=event_lon, starttime=sttime,
-                                   minradius=minradiuskm/111.32, maxradius=maxradiuskm/111.32,
+        inv = client1.get_stations(latitude=event_lat, longitude=event_lon, startbefore=event_time,
+                                   endafter=event_time, minradius=minradiuskm/111.32,
+                                   maxradius=maxradiuskm/111.32,
                                    channel=chan, level=level, **kwargs)
         if inventory is None:
             inventory = inv

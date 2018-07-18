@@ -1796,7 +1796,7 @@ class InteractivePlot:
             if self.specg['freqmax'] is None:
                 self.specg['freqmax'] = st_temp[0].stats.sampling_rate/2.
 #            if self.specg['minpower'] is None:
-#                self.specg['minpower'] = 10 
+#                self.specg['minpower'] = 10
 #            if self.specg['maxpower'] is None:
 #                self.specg['maxpower'] = 1000000
 #            if self.specg['wlen'] is None:
@@ -2107,12 +2107,12 @@ class InteractivePlot:
                                   textbox=True, vlines=self.vlines, picktimes=self.picktimes)
             elif event.button == 'up':  # go back up to view other traces
                 self.indfirst = max(self.indfirst-1, 0)
-                self.fig, = recsec(self.st_current, xlim=np.sort(self.xlims[-2:]),
-                                   scalfact=self.scalfact, update=True, fighandle=self.fig,
-                                   norm=self.normflag, indfirst=self.indfirst, tscale=self.tscale,
-                                   maxtraces=self.maxtraces, textline=self.print1,
-                                   menu=self.menu_print, textbox=True,
-                                   vlines=self.vlines, picktimes=self.picktimes)
+                self.fig = recsec(self.st_current, xlim=np.sort(self.xlims[-2:]),
+                                  scalfact=self.scalfact, update=True, fighandle=self.fig,
+                                  norm=self.normflag, indfirst=self.indfirst, tscale=self.tscale,
+                                  maxtraces=self.maxtraces, textline=self.print1,
+                                  menu=self.menu_print, textbox=True,
+                                  vlines=self.vlines, picktimes=self.picktimes)
 
 
 def nextpow2(val):

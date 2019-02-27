@@ -7,6 +7,8 @@ import numpy.ma as ma
 import scipy.stats as ss
 from scipy.signal import periodogram
 import statsmodels.robust
+from obspy.signal.konnoohmachismoothing import konno_ohmachi_smoothing as ksmooth
+
 
 
 """
@@ -164,7 +166,7 @@ def meansqfreqSN(st, stnoise, SNrat=1.5, freqlim=(0, 25), win=None):
     return fms, var
 
 
-def spectrumSN(st, stnoise, SNrat=1.5, win=None):
+def spectrumSN(st, stnoise, SNrat=1.5, win=None, KOsmooth=True, bandwidth=40, lognormalize=False):
     """
     Return masked arrays of spectrum, masking where SNratio is greater than SNrat
     USAGE
@@ -201,6 +203,9 @@ def spectrumSN(st, stnoise, SNrat=1.5, win=None):
         maxnfft = np.max((nextpow2(len(dat)), nextpow2(len(pdat))))
         freqs1, amps1 = spectrum_manual(dat, tvec, nfft=maxnfft)
         _, pamps1 = spectrum_manual(pdat, ptvec, nfft=maxnfft)
+        if KOsmooth:
+            amps1 = ksmooth(amps1, freqs1, normalize=lognormalize, bandwidth=bandwidth)
+            pamps1 = ksmooth(pamps1, freqs1, normalize=lognormalize, bandwidth=bandwidth)
         idx = (amps1/pamps1 < SNrat)  # good values
         amps.append(amps1)
         freqs.append(freqs1)
@@ -632,6 +637,7 @@ def subsamplxcorr(tr1, tr2, shifts=None):
 def fshift(x, s):
     """
     Fractional circular shift (for use in subsample xcorr)
+    Note, this shifts things backwards by s, not forward
 
     Based on code by Francois Bouffard 2005 fbouffar@gel.ulaval.ca -
     Francois' comments about it:

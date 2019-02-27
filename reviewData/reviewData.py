@@ -28,7 +28,8 @@ Written by kallstadt@usgs.gov
 def getdata(network, station, location, channel, starttime, endtime, attach_response=True,
             clientname='IRIS', savedat=False, folderdat='data',
             filenamepref='Data_', loadfromfile=False, reloadfile=False,
-            detrend='demean', merge=True, pad=True, fill_value=0.):
+            detrend='demean', merge=True, pad=True, fill_value=0.,
+            user=None, password=None):
     """This function grabs data using FDSN webservices
 
     This is a wrapper around obspy.clients.fdsn that also can automatically
@@ -96,7 +97,7 @@ def getdata(network, station, location, channel, starttime, endtime, attach_resp
         st_ordered = read(folderdat+'/'+filename, format='PICKLE')
     else:
         try:
-            client = FDSN_Client(clientname)
+            client = FDSN_Client(clientname, user=None, password=None)
             st = client.get_waveforms(network.replace(' ', ''), station.replace(' ', ''),
                                       location.replace(' ', ''), channel.replace(' ', ''),
                                       starttime, endtime, attach_response=True)
@@ -158,7 +159,8 @@ def getdata(network, station, location, channel, starttime, endtime, attach_resp
 def getdata_exact(stations, starttime, endtime, attach_response=True, clientname='IRIS',
                   savedat=False, folderdat='data', filenamepref='Data_',
                   loadfromfile=False, reloadfile=False, detrend='demean',
-                  merge=True, pad=True, fill_value=0.):
+                  merge=True, pad=True, fill_value=0.,
+                  user=None, password=None):
     """This function grabs exact station data using FDSN webservices
 
     Same as getdata, but only grabs the exact station channel combos specified
@@ -213,7 +215,7 @@ def getdata_exact(stations, starttime, endtime, attach_response=True, clientname
     else:
         st = Stream()
         try:
-            client = FDSN_Client(clientname)
+            client = FDSN_Client(clientname, user=user, password=password)
             for statup in stations:
                 try:
                     sttemp = client.get_waveforms(statup[2], statup[0], statup[3], statup[1],
@@ -2216,10 +2218,14 @@ def get_stations(event_lat, event_lon, event_time, clients=['IRIS'], minradiuskm
     inventory = None
     for client in clients:
         client1 = FDSN_Client(client)
-        inv = client1.get_stations(latitude=event_lat, longitude=event_lon, startbefore=event_time,
-                                   endafter=event_time, minradius=minradiuskm/111.32,
-                                   maxradius=maxradiuskm/111.32,
-                                   channel=chan, level=level, **kwargs)
+        try:
+            inv = client1.get_stations(latitude=event_lat, longitude=event_lon, startbefore=event_time,
+                                       endafter=event_time, minradius=minradiuskm/111.32,
+                                       maxradius=maxradiuskm/111.32,
+                                       channel=chan, level=level, **kwargs)
+        except Exception:
+            print('No stations found from %s Data Center' % (client,))
+            inv = None
         if inventory is None:
             inventory = inv
         else:

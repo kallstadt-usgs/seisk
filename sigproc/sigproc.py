@@ -638,9 +638,9 @@ def templateXcorrRA(st, st_template, threshold=0.7):
     ccs = np.array(ccs)
     xcorFunc = np.median(ccs, axis=0)
     
-    peaks, mins = peakdet(xcorFunc, delta=0.1)
+    peaks, mins = peakdet(xcorFunc, delta=0.05)
     exceeds = np.where(xcorFunc > threshold)
-    indxs = np.intersect1d(peaks, exceeds)
+    indxs = np.intersect1d(peaks[:,0], exceeds)
     times = np.repeat(st[0].stats.starttime, len(indxs)) + np.take(xcorLags, indxs.astype(int))
 
     return xcorFunc, xcorLags, ccs, times
@@ -738,18 +738,18 @@ def findoutliers(arr, stdequiv=2):
     return idx
 
 
-def peakdet(v, delta): #, x=None):
+def peakdet(v, delta):
     """
     Detect major peaks and minima while ignoring insignificant peaks
     
     Args:
-        v (array): input array on which peaks should be detected
+        v (array): input array of length M on which peaks should be detected
         delta (float): a point is considered a maximum peak if it has the maximal
             value, and was preceded (to the left) by a value lower by
             delta.
     
     Returns (tuple):
-        indices of maxima, indices of minima
+        M x 2 set of index, value pairs of maxima, M x 2 set of index, value pairs of minima
             
     
     Converted from MATLAB script at http://billauer.co.il/peakdet.html
@@ -782,13 +782,12 @@ def peakdet(v, delta): #, x=None):
     maxtab = []
     mintab = []
 
-    #if x is None:
-    #    x = arange(len(v))
+    x = arange(len(v))
 
     v = asarray(v)
 
-    #if len(v) != len(x):
-    #    sys.exit('Input vectors v and x must have same length')
+    if len(v) != len(x):
+        sys.exit('Input vectors v and x must have same length')
 
     if not isscalar(delta):
         sys.exit('Input argument delta must be a scalar')
@@ -805,22 +804,22 @@ def peakdet(v, delta): #, x=None):
         this = v[i]
         if this > mx:
             mx = this
-            #mxpos = x[i]
+            mxpos = x[i]
         if this < mn:
             mn = this
-            #mnpos = x[i]
+            mnpos = x[i]
 
         if lookformax:
             if this < mx-delta:
                 maxtab.append((mxpos, mx))
                 mn = this
-                #mnpos = x[i]
+                mnpos = x[i]
                 lookformax = False
         else:
             if this > mn+delta:
                 mintab.append((mnpos, mn))
                 mx = this
-                #mxpos = x[i]
+                mxpos = x[i]
                 lookformax = True
 
     return array(maxtab), array(mintab)

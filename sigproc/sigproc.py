@@ -569,7 +569,6 @@ def templateXcorr(datastream, template):
     if len(y) < len(x):
         raise RuntimeError('your template is longer than your datastream')
 
-
     xy = np.correlate(y, x, 'valid')
     x2 = np.sum(x**2.)
     csy2 = np.pad(np.cumsum(y**2.), (1, 0), 'constant', constant_values=(0., 0.))
@@ -586,6 +585,56 @@ def templateXcorr(datastream, template):
     xcorFunc = xy/np.sqrt(np.dot(x2, y2))
     xcorLags = (np.linspace(0, (len(xy)-1)*1/datastream.stats.sampling_rate, num=len(xy)))
     return xcorFunc, xcorLags
+
+
+def templateXcorrRA(st, st_template, threshold=0.7, extractTimes=True):
+    """
+    Array cross correlation with template
+
+    Gives separate results for each station (compared to its template) and aggregate result
+    in which median cross correlations are taken across all stations at each time shift
+    and times above threshold are extracted and reported as UTCDateTimes
+
+    Args:
+        st: obspy stream to search for matches with template
+        st_template: obspy stream containing template event, must have same stations as st
+
+    """
+    sta1 = [tr.id for tr in st]
+    sta2 = [tr.id for tr in st_template]
+    srs = [tr.stats.sampling_rate for tr in st]
+
+    if not np.array_equal(sta1.sort(), sta2.sort()):
+        raise Exception('st and st_template must contain the same channels')
+
+    if len(set(srs)) != 1:
+        raise Exception('sampling rates are not uniform, resample all to same sample rate before running')
+
+    lens = [len(tr) for tr in st]
+    lens2 = [len(tr) for tr in st_template]
+
+    if len(set(lens)) != 1:
+        raise Exception('Different data lengths in st, all must have same length')
+    if len(set(lens2)) != 1:
+        raise Exception('Different data lengths in st_template, all must have same length')
+
+    ccs = []
+
+    # Loop over stations
+    for sta in sta1:
+        tempxcorFunc, xcorLags = templateXcorr(st.select(id=sta)[0], st_template.select(id=sta)[0])
+        ccs.append(tempxcorFunc)
+    ccs = np.array(ccs)
+    xcorFunc = np.median(ccs, axis=0)
+    
+    if extractTimes:
+        peaks, mins = peakdet(xcorFunc, delta=0.1)
+        exceeds = np.where(xcorFunc > threshold)
+        indxs = np.intersect1d(peaks, exceeds)
+        times = np.repeat(st[0].stats.starttime, len(indxs)) + np.take(xcorLags, indxs.astype(int))
+    else:
+        times = []
+    return xcorFunc, xcorLags, ccs, times
 
 
 def circshift(tr, ind):

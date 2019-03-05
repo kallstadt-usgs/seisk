@@ -553,7 +553,17 @@ def xcorrnorm(tr1, tr2, pad=True):
 
 def templateXcorr(datastream, template):
     """
+    Normalized cross correlation of short template trace against longer data stream
     Based off matlab function coralTemplateXcorr.m by Justin Sweet
+    
+    Args:
+        datastream: obspy trace of longer time period to search for template matches
+        template: obspy trace of shorter template
+    
+    Returns (tuple): xcorFunc, xcorLags, where:
+        xcorFunc: cross correlation function
+        xcorLags: time shifts corresponding to xcorFunc
+    
 
     """
     if datastream.stats.sampling_rate != template.stats.sampling_rate:
@@ -587,7 +597,7 @@ def templateXcorr(datastream, template):
     return xcorFunc, xcorLags
 
 
-def templateXcorrRA(st, st_template, threshold=0.7, extractTimes=True):
+def templateXcorrRA(st, st_template, threshold=0.7):
     """
     Array cross correlation with template
 
@@ -598,6 +608,7 @@ def templateXcorrRA(st, st_template, threshold=0.7, extractTimes=True):
     Args:
         st: obspy stream to search for matches with template
         st_template: obspy stream containing template event, must have same stations as st
+        threshold (float): threshold, between 0 and 1, for extracting possible match times
 
     """
     sta1 = [tr.id for tr in st]
@@ -627,13 +638,11 @@ def templateXcorrRA(st, st_template, threshold=0.7, extractTimes=True):
     ccs = np.array(ccs)
     xcorFunc = np.median(ccs, axis=0)
     
-    if extractTimes:
-        peaks, mins = peakdet(xcorFunc, delta=0.1)
-        exceeds = np.where(xcorFunc > threshold)
-        indxs = np.intersect1d(peaks, exceeds)
-        times = np.repeat(st[0].stats.starttime, len(indxs)) + np.take(xcorLags, indxs.astype(int))
-    else:
-        times = []
+    peaks, mins = peakdet(xcorFunc, delta=0.1)
+    exceeds = np.where(xcorFunc > threshold)
+    indxs = np.intersect1d(peaks, exceeds)
+    times = np.repeat(st[0].stats.starttime, len(indxs)) + np.take(xcorLags, indxs.astype(int))
+
     return xcorFunc, xcorLags, ccs, times
 
 
@@ -729,9 +738,23 @@ def findoutliers(arr, stdequiv=2):
     return idx
 
 
-def peakdet(v, delta, x=None):
+def peakdet(v, delta): #, x=None):
     """
+    Detect major peaks and minima while ignoring insignificant peaks
+    
+    Args:
+        v (array): input array on which peaks should be detected
+        delta (float): a point is considered a maximum peak if it has the maximal
+            value, and was preceded (to the left) by a value lower by
+            delta.
+    
+    Returns (tuple):
+        indices of maxima, indices of minima
+            
+    
     Converted from MATLAB script at http://billauer.co.il/peakdet.html
+
+    Original documentation:
 
     Returns two arrays
 
@@ -759,13 +782,13 @@ def peakdet(v, delta, x=None):
     maxtab = []
     mintab = []
 
-    if x is None:
-        x = arange(len(v))
+    #if x is None:
+    #    x = arange(len(v))
 
     v = asarray(v)
 
-    if len(v) != len(x):
-        sys.exit('Input vectors v and x must have same length')
+    #if len(v) != len(x):
+    #    sys.exit('Input vectors v and x must have same length')
 
     if not isscalar(delta):
         sys.exit('Input argument delta must be a scalar')
@@ -782,22 +805,22 @@ def peakdet(v, delta, x=None):
         this = v[i]
         if this > mx:
             mx = this
-            mxpos = x[i]
+            #mxpos = x[i]
         if this < mn:
             mn = this
-            mnpos = x[i]
+            #mnpos = x[i]
 
         if lookformax:
             if this < mx-delta:
                 maxtab.append((mxpos, mx))
                 mn = this
-                mnpos = x[i]
+                #mnpos = x[i]
                 lookformax = False
         else:
             if this > mn+delta:
                 mintab.append((mnpos, mn))
                 mx = this
-                mxpos = x[i]
+                #mxpos = x[i]
                 lookformax = True
 
     return array(maxtab), array(mintab)

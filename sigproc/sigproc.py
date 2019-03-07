@@ -624,17 +624,25 @@ def templateXcorrRA(st, st_template, threshold=0.7):
     lens = [len(tr) for tr in st]
     lens2 = [len(tr) for tr in st_template]
 
+    # Make sure they are the exact same length by interpolating if necessary
     if len(set(lens)) != 1:
-        raise Exception('Different data lengths in st, all must have same length')
+        print('Different data lengths in st, all must have same length, interpolating to same length')
+        stts = [tr.stats.starttime for tr in st]
+        lens = [tr.stats.npts for tr in st]
+        st.interpolate(st[0].stats.sampling_rate, starttime=np.max(stts), npts=np.min(lens)-1)
     if len(set(lens2)) != 1:
-        raise Exception('Different data lengths in st_template, all must have same length')
+        print('Different data lengths in st_template, all must have same length, interpolating to same length')
+        stts = [tr.stats.starttime for tr in st_template]
+        lens = [tr.stats.npts for tr in st_template]
+        st_template.interpolate(st_template[0].stats.sampling_rate, starttime=np.max(stts), npts=np.min(lens)-1)
 
     ccs = []
 
     # Loop over stations
     for sta in sta1:
-        tempxcorFunc, xcorLags = templateXcorr(st.select(id=sta)[0], st_template.select(id=sta)[0])
-        ccs.append(tempxcorFunc)
+        #tempxcorFunc, xcorLags = templateXcorr(st.select(id=sta)[0], st_template.select(id=sta)[0])
+        maxcor, maxlag, maxdt, cc, lags, xcorLags = xcorrnorm(st.select(id=sta)[0], st_template.select(id=sta)[0])
+        ccs.append(cc)
     ccs = np.array(ccs)
     xcorFunc = np.median(ccs, axis=0)
     

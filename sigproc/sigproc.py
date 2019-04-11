@@ -8,6 +8,7 @@ import scipy.stats as ss
 from scipy.signal import periodogram
 import statsmodels.robust
 from obspy.signal.konnoohmachismoothing import konno_ohmachi_smoothing as ksmooth
+from matplotlib.mlab import apply_window, stride_windows, detrend, window_hanning
 
 
 """
@@ -488,6 +489,57 @@ def maketvec(trace):
     """
     tvec = (np.linspace(0, (len(trace.data)-1)*1/trace.stats.sampling_rate, num=len(trace.data)))
     return tvec
+
+
+def window(x, n, samprate, overlap, KOsmooth=False, window_correction=None, normalize=False, bandwidth=40):
+    """
+    Windowing borrowed from matplotlib.mlab for specgram (_spectral_helper)
+    Applies hanning window with 0.5 overlap (so amplitudes are ~preserved)
+    https://github.com/matplotlib/matplotlib/blob/f92bd013ea8f0f99d2e177fd572b86f3b42bb652/lib/matplotlib/mlab.py#L434
+
+    Args:
+        x (array): 1xn array data to window
+        n (int): length each window should be, in samples
+        overlap (float): proportion of overlap of windows, should be between 0 and 1
+        samprate (float): sampling rate of x, in samples per second
+        KOsmooth (bool): If True, will return Konno Ohmachi smoothed spectra with only positive frequencies
+        window_correction (str): Apply correction for fourier spectrum to account for windowing. If 'amp', will
+            multiply spectrum by 2 to preserve amplitude
+        normalize (bool): If True, KOsmooth will be smoothed linearly, otherwise will be smooth logarithmically
+        bandwidth (float): bandwidth for KO smoothing
+
+    Returns:
+        tmid: time vector taken at midpoints of each window (in sec from 0)
+        tstart: time vector taken at beginning of each window (in sec from 0)
+        freqs: vector of frequency (Hz), applyFT and applyKOsmooth are False, will return None
+        resultF: fourier transform, or smoothed fourier transform of each time window
+        resultT: time series of each time window (note, will have hanning window applied)
+
+    """
+    if overlap < 0. or overlap > 1.:
+        raise Exception('overlap must be between 0 and 1')
+
+    noverlap = int(overlap * n)
+    result = stride_windows(x, n, noverlap)
+    row, col = np.shape(result)
+    newsampint = (n-noverlap)/samprate
+    tstart = np.linspace(0, (col-1)*newsampint, num=col)
+    tmid = tstart + 0.5*newsampint
+    result = detrend(result, key='linear', axis=0)
+    resultT, windowVals = apply_window(result, window_hanning, axis=0, return_window=True)
+    if applyKOsmooth:
+        resultF = np.fft.rfft(resultT, n=n, axis=0)  # *1.63  # Correct for windowing, same energy, would be 2 for same amplitude
+        freqs = np.fft.rfftfreq(n, 1/samprate)
+        resultF = ksmooth(np.abs(resultF.T), freqs, normalize=normalize, bandwidth=bandwidth)
+        resultF = resultF.T
+        if window_correction == 'amp':
+            resultF *= 2.0
+        elif window_correction == 'energy':
+            resultF *= 1.63
+    else:
+        resultF = np.fft.fft(resultT, n=n, axis=0)  # *1.63  # Correct for windowing, same energy, would be 2 for same amplitude
+        freqs = np.fft.fftfreq(n, 1/samprate)
+    return tmid, tstart, freqs, resultF, resultT
 
 
 def unique_list(seq):  # make a list only contain unique values and keep their order

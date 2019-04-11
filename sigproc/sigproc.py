@@ -10,7 +10,6 @@ import statsmodels.robust
 from obspy.signal.konnoohmachismoothing import konno_ohmachi_smoothing as ksmooth
 
 
-
 """
 A collection of signal processing codes for use with obspy and other
 miscellaneous functions.
@@ -166,18 +165,23 @@ def meansqfreqSN(st, stnoise, SNrat=1.5, freqlim=(0, 25), win=None):
     return fms, var
 
 
-def spectrumSN(st, stnoise, SNrat=1.5, win=None, KOsmooth=True, bandwidth=40, lognormalize=False):
+def spectrumSN(st, stnoise, SNrat=1.5, win=None, KOsmooth=True, bandwidth=40, normalize=False):
     """
     Return masked arrays of spectrum, masking where SNratio is greater than SNrat
-    USAGE
-    freqs, amps, freqmask, ampmask = spectrumSN(st, stnoise, SNrat=1.5, freqlim=(0, 25), win=None)
-    INPUTS
-    st = obspy stream object, or trace object
-    stnoise = obspy stream object from time period just before st (or whatever noise window desired, but needs to have same sample rate)
-    win = tuple of time window in seconds (e.g. win=(3., 20.)) over which to compute mean squared frequency, None computes for entire time window in each trace of st
-    OUTPUTS
-    freqs = list of np.arrays of frequency vectors (Hz)
-    amps = list of np.arrays of amplitude vectors
+
+    Args:
+        st: obspy stream object, or trace object
+        stnoise: obspy stream object from time period just before st (or whatever noise window desired, but needs to
+            have same sample rate)
+        win: tuple of time window in seconds (e.g. win=(3., 20.)) over which to compute mean squared frequency,
+            None computes for entire time window in each trace of st
+        KOsmooth (bool): if True, will smooth spectrum using Konno Ohmachi Smoothing prior to computing SN ratios
+        bandwidth (int): bandwidth parameter for KOsmooth (typically 40)
+        normalize (bool): for KOsmooth only, if False will normalize on a log scale (default), if True, will normalize on linear
+
+    Returns:
+        freqs = list of np.arrays of frequency vectors (Hz)
+        amps = list of np.arrays of amplitude vectors
     """
     st = Stream(st)  # turn into a stream object in case st is a trace
     stnoise = Stream(stnoise)
@@ -204,8 +208,8 @@ def spectrumSN(st, stnoise, SNrat=1.5, win=None, KOsmooth=True, bandwidth=40, lo
         freqs1, amps1 = spectrum_manual(dat, tvec, nfft=maxnfft)
         _, pamps1 = spectrum_manual(pdat, ptvec, nfft=maxnfft)
         if KOsmooth:
-            amps1 = ksmooth(amps1, freqs1, normalize=lognormalize, bandwidth=bandwidth)
-            pamps1 = ksmooth(pamps1, freqs1, normalize=lognormalize, bandwidth=bandwidth)
+            amps1 = ksmooth(np.abs(amps1), freqs1, normalize=normalize, bandwidth=bandwidth)
+            pamps1 = ksmooth(np.abs(pamps1), freqs1, normalize=normalize, bandwidth=bandwidth)
         idx = (amps1/pamps1 < SNrat)  # good values
         amps.append(amps1)
         freqs.append(freqs1)
@@ -388,7 +392,8 @@ def kurtosis(st, winlen, BaillCF=False):
     return st
 
 
-def spectrum(st, win=None, nfft=None, plot=False, powerspec=False, scaling='spectrum'):
+def spectrum(st, win=None, nfft=None, plot=False, powerspec=False, scaling='spectrum', KOsmooth=False, bandwidth=40,
+             normalize=False):
     """
     Make amplitude spectrum of traces in stream and plot using rfft (for real inputs, no negative frequencies)
 
@@ -400,6 +405,9 @@ def spectrum(st, win=None, nfft=None, plot=False, powerspec=False, scaling='spec
         powerspec = False for fourier amplitude spectrum, True for power spectrum
         scaling = if powerspec is True, 'density' or 'spectrum' for power spectral density (V**2/Hz)
             or power spectrum (V**2)
+        KOsmooth (bool): if True, will smooth spectrum using Konno Ohmachi Smoothing
+        bandwidth (int): bandwidth parameter for KOsmooth (typically 40)
+        normalize (bool): for KOsmooth only, if False will normalize on a log scale (default), if True, will normalize on linear
 
     Returns
         freqs = frequency vector, only positive values
@@ -412,29 +420,33 @@ def spectrum(st, win=None, nfft=None, plot=False, powerspec=False, scaling='spec
     for trace in st:
         tvec = maketvec(trace)  # Time vector
         dat = trace.data
-        freq, amp = spectrum_manual(dat, tvec, win, nfft, plot, powerspec, scaling)
+        freq, amp = spectrum_manual(dat, tvec, win, nfft, plot, powerspec, scaling, KOsmooth=KOsmooth,
+                                    bandwidth=bandwidth, normalize=normalize)
         amps.append(amp)
         freqs.append(freq)
     return freqs, amps
 
 
-def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False, scaling='spectrum'):
+def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False, scaling='spectrum', KOsmooth=False,
+                    bandwidth=40, normalize=False):
     """
     Make amplitude spectrum of time series and plot using rfft (for real inputs, no negative frequencies)
-    USAGE
-    freqs, amps = spectrum(trace, win=None, plot=False)
-    INPUTS
-    dat = obspy trace object
-    tvec = time vector for dat
-    win = tuple of time window in seconds (e.g. win=(3., 20.)) over which to compute amplitude spectrum
-    nfft = number of points to use in nfft, default None uses the next power of 2 of length of dat
-    plot = True, plot spectrum, False, don't
-    powerspec = False for fourier amplitude spectrum, True for power spectrum
-    scaling = if powerspec is True, 'density' or 'spectrum' for power spectral density (V**2/Hz) or power spectrum (V**2)
 
-    OUTPUTS
-    freqs = frequency vector, only positive values
-    amps = amplitude vector
+    Args:
+        dat = obspy trace object
+        tvec = time vector for dat
+        win = tuple of time window in seconds (e.g. win=(3., 20.)) over which to compute amplitude spectrum
+        nfft = number of points to use in nfft, default None uses the next power of 2 of length of dat
+        plot = True, plot spectrum, False, don't
+        powerspec = False for fourier amplitude spectrum, True for power spectrum
+        scaling = if powerspec is True, 'density' or 'spectrum' for power spectral density (V**2/Hz) or power spectrum (V**2)
+        KOsmooth (bool): if True, will smooth spectrum using Konno Ohmachi Smoothing
+        bandwidth (int): bandwidth parameter for KOsmooth (typically 40)
+        normalize (bool): for KOsmooth only, if False will normalize on a log scale (default), if True, will normalize on linear
+
+    Results:
+        freqs = frequency vector, only positive values
+        amps = amplitude vector
     """
     sample_int = tvec[1]-tvec[0]
     if win is not None:
@@ -452,6 +464,8 @@ def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False,
         freqs, amps = periodogram(dat, 1/sample_int, nfft=nfft, return_onesided=True, scaling=scaling)
         #amps = (2. * np.pi * sample_int/nfft) * np.abs(np.fft.rfft(dat, n=nfft))**2.
         #freqs = np.fft.rfftfreq(nfft, sample_int)
+    if KOsmooth:
+        amps = ksmooth(np.abs(amps), freqs, normalize=normalize, bandwidth=bandwidth)
     if plot is True:
         plt.plot(freqs, amps)
         if powerspec is False:

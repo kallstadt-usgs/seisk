@@ -497,7 +497,7 @@ def window(x, n, samprate, overlap, KOsmooth=False, window_correction=None, norm
     Applies hanning window (if use 0.5 overlap, amplitudes are ~preserved)
     https://github.com/matplotlib/matplotlib/blob/f92bd013ea8f0f99d2e177fd572b86f3b42bb652/lib/matplotlib/mlab.py#L434
 
-    NOTE DOES NOT DIVIDE BY NFFT TO CORRECT AMPLITUDES...SHOULD ADD
+    DIVIDES BY NFFT TO CORRECT AMPLITUDES
 
     Args:
         x (array): 1xn array data to window
@@ -529,10 +529,12 @@ def window(x, n, samprate, overlap, KOsmooth=False, window_correction=None, norm
     tmid = tstart + 0.5*newsampint
     if detrend:
         resultT = mlab.detrend(resultT1, key='linear', axis=0)
+    else:
+        resultT = resultT1
     resultTwin, windowVals = mlab.apply_window(resultT, mlab.window_hanning, axis=0, return_window=True)
     if KOsmooth:
         print('here')
-        resultF = np.fft.rfft(resultTwin, n=n, axis=0)
+        resultF = np.fft.rfft(resultTwin, n=n, axis=0)/n
         if window_correction == 'amp':  # For hanning window
             resultF *= 2.0
         elif window_correction == 'energy':
@@ -542,7 +544,7 @@ def window(x, n, samprate, overlap, KOsmooth=False, window_correction=None, norm
         resultF = resultF.T
 
     else:
-        resultF = np.fft.fft(resultTwin, n=n, axis=0)
+        resultF = np.fft.fft(resultTwin, n=n, axis=0)/n
         freqs = np.fft.fftfreq(n, 1/samprate)
         if window_correction == 'amp':
             resultF *= 2.0
@@ -676,6 +678,8 @@ def templateXcorrRA(st, st_template, threshold=0.7):
     """
     Array cross correlation with template
 
+    TODO add method to consider amplitudes between streams, not just relative shapes of each stream
+
     Gives separate results for each station (compared to its template) and aggregate result
     in which median cross correlations are taken across all stations at each time shift
     and times above threshold are extracted and reported as UTCDateTimes
@@ -720,13 +724,18 @@ def templateXcorrRA(st, st_template, threshold=0.7):
         ccs.append(cc)
     ccs = np.array(ccs)
     xcorFunc = np.median(ccs, axis=0)
-    
+    #xcorFunc = np.mean(ccs, axis=0)
+
     peaks, mins = peakdet(xcorFunc, delta=0.05)
     exceeds = np.where(xcorFunc > threshold)
-    indxs = np.intersect1d(peaks[:,0], exceeds)
+    indxs = np.intersect1d(peaks[:, 0], exceeds)
     times = np.repeat(st[0].stats.starttime, len(indxs)) + np.take(xcorLags, indxs.astype(int))
+    if len(indxs) > 0:
+        vals = xcorFunc[indxs.astype(int)]
+    else:
+        vals = []
 
-    return xcorFunc, xcorLags, ccs, times
+    return xcorFunc, xcorLags, ccs, times, vals
 
 
 def circshift(tr, ind):

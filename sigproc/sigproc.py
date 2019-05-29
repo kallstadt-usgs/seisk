@@ -431,8 +431,8 @@ def spectrum(st, win=None, nfft=None, plot=False, powerspec=False, scaling='spec
     return freqs, amps
 
 
-def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False, scaling='spectrum', KOsmooth=False,
-                    bandwidth=40, normalize=False):
+def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False, scaling='spectrum', normalize=True,
+                    KOsmooth=False, bandwidth=40, KOnormalize=False):
     """
     Make amplitude spectrum of time series and plot using rfft (for real inputs, no negative frequencies)
     Divides fft by samprate (multiply by deltat) to correct scaling to comparable to continuous FT
@@ -445,9 +445,11 @@ def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False,
         plot = True, plot spectrum, False, don't
         powerspec = False for fourier amplitude spectrum, True for power spectrum
         scaling = if powerspec is True, 'density' or 'spectrum' for power spectral density (V**2/Hz) or power spectrum (V**2)
+        normalize (bool): if True, will normalize by signal length by dividing by 1/NFFT (1/NFFT = deltat/time length),
+            if False, will scale by deltat (1/samprate) to approximate continuous transform
         KOsmooth (bool): if True, will smooth spectrum using Konno Ohmachi Smoothing
         bandwidth (int): bandwidth parameter for KOsmooth (typically 40)
-        normalize (bool): for KOsmooth only, if False will normalize on a log scale (default), if True, will normalize on linear
+        KOnormalize (bool): for KOsmooth only, if False will normalize on a log scale (default), if True, will normalize on linear
 
     Results:
         freqs = frequency vector, only positive values
@@ -463,14 +465,17 @@ def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False,
     if nfft is None:
         nfft = nextpow2(len(dat))
     if powerspec is False:
-        amps = np.abs(np.fft.rfft(dat, n=nfft))*sample_int
+        if normalize:
+            amps = np.abs(np.fft.rfft(dat, n=nfft))/nfft
+        else:
+            amps = np.abs(np.fft.rfft(dat, n=nfft))*sample_int
         freqs = np.fft.rfftfreq(nfft, sample_int)
     else:
         freqs, amps = periodogram(dat, 1/sample_int, nfft=nfft, return_onesided=True, scaling=scaling)
         #amps = (2. * np.pi * sample_int/nfft) * np.abs(np.fft.rfft(dat, n=nfft))**2.
         #freqs = np.fft.rfftfreq(nfft, sample_int)
     if KOsmooth:
-        amps = ksmooth(np.abs(amps), freqs, normalize=normalize, bandwidth=bandwidth)
+        amps = ksmooth(np.abs(amps), freqs, normalize=KOnormalize, bandwidth=bandwidth)
     if plot is True:
         plt.plot(freqs, amps)
         if powerspec is False:
@@ -495,7 +500,8 @@ def maketvec(trace):
     return tvec
 
 
-def window(x, n, samprate, overlap, KOsmooth=False, window_correction=None, normalize=False, bandwidth=40, detrend=True):
+def window(x, n, samprate, overlap, normalize=True, KOsmooth=False, window_correction=None, KOnormalize=False,
+           bandwidth=40, detrend=True):
     """
     Windowing borrowed from matplotlib.mlab for specgram (_spectral_helper)
     Applies hanning window (if use 0.5 overlap, amplitudes are ~preserved)
@@ -507,12 +513,15 @@ def window(x, n, samprate, overlap, KOsmooth=False, window_correction=None, norm
         x (array): 1xn array data to window
         n (int): length each window should be, in samples
         overlap (float): proportion of overlap of windows, should be between 0 and 1
+        normalize (bool): if True, will normalize by signal length by dividing by 1/NFFT (1/NFFT = deltat/time length),
+            if False, will scale by deltat (1/samprate) to approximate continuous transform
         samprate (float): sampling rate of x, in samples per second
         KOsmooth (bool): If True, will return Konno Ohmachi smoothed spectra with only positive frequencies
         window_correction (str): Apply correction for fourier spectrum to account for windowing. If 'amp', will
             multiply spectrum by 2 to preserve amplitude, if 'energy' will multiply by 1.63
         normalize (bool): If True, KOsmooth will be smoothed linearly, otherwise will be smooth logarithmically
         bandwidth (float): bandwidth for KO smoothing
+        detrend
 
     Returns:
         tmid: time vector taken at midpoints of each window (in sec from 0)
@@ -537,17 +546,23 @@ def window(x, n, samprate, overlap, KOsmooth=False, window_correction=None, norm
         resultT = resultT1
     resultTwin, windowVals = mlab.apply_window(resultT, mlab.window_hanning, axis=0, return_window=True)
     if KOsmooth:
-        resultF = np.fft.rfft(resultTwin, n=n, axis=0)/n
+        if normalize:
+            resultF = np.fft.rfft(resultTwin, n=n, axis=0)/n
+        else:
+            resultF = np.fft.rfft(resultTwin, n=n, axis=0)/samprate
         if window_correction == 'amp':  # For hanning window
             resultF *= 2.0
         elif window_correction == 'energy':
             resultF *= 1.63
         freqs = np.fft.rfftfreq(n, 1/samprate)
-        resultF = ksmooth(np.abs(resultF.T), freqs, normalize=normalize, bandwidth=bandwidth)
+        resultF = ksmooth(np.abs(resultF.T), freqs, normalize=KOnormalize, bandwidth=bandwidth)
         resultF = resultF.T
 
     else:
-        resultF = np.fft.fft(resultTwin, n=n, axis=0)/n
+        if normalize:
+            resultF = np.fft.fft(resultTwin, n=n, axis=0)/n
+        else:
+            resultF = np.fft.fft(resultTwin, n=n, axis=0)/samprate
         freqs = np.fft.fftfreq(n, 1/samprate)
         if window_correction == 'amp':
             resultF *= 2.0

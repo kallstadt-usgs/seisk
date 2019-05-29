@@ -425,6 +425,9 @@ def spectrum(st, win=None, nfft=None, plot=False, powerspec=False, scaling='spec
                                     bandwidth=bandwidth, normalize=normalize)
         amps.append(amp)
         freqs.append(freq)
+    if len(st) == 1:
+        freqs = freqs[0]
+        amps = amps[0]
     return freqs, amps
 
 
@@ -432,6 +435,7 @@ def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False,
                     bandwidth=40, normalize=False):
     """
     Make amplitude spectrum of time series and plot using rfft (for real inputs, no negative frequencies)
+    Divides fft by samprate (multiply by deltat) to correct scaling to comparable to continuous FT
 
     Args:
         dat = obspy trace object
@@ -459,7 +463,7 @@ def spectrum_manual(dat, tvec, win=None, nfft=None, plot=False, powerspec=False,
     if nfft is None:
         nfft = nextpow2(len(dat))
     if powerspec is False:
-        amps = np.abs(np.fft.rfft(dat, n=nfft)/nfft)
+        amps = np.abs(np.fft.rfft(dat, n=nfft))*sample_int
         freqs = np.fft.rfftfreq(nfft, sample_int)
     else:
         freqs, amps = periodogram(dat, 1/sample_int, nfft=nfft, return_onesided=True, scaling=scaling)
@@ -533,7 +537,6 @@ def window(x, n, samprate, overlap, KOsmooth=False, window_correction=None, norm
         resultT = resultT1
     resultTwin, windowVals = mlab.apply_window(resultT, mlab.window_hanning, axis=0, return_window=True)
     if KOsmooth:
-        print('here')
         resultF = np.fft.rfft(resultTwin, n=n, axis=0)/n
         if window_correction == 'amp':  # For hanning window
             resultF *= 2.0

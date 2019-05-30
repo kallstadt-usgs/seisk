@@ -393,8 +393,8 @@ def kurtosis(st, winlen, BaillCF=False):
     return st
 
 
-def spectrum(st, win=None, nfft=None, plot=False, powerspec=False, scaling='spectrum', KOsmooth=False, bandwidth=40,
-             normalize=False):
+def spectrum(st, win=None, nfft=None, plot=False, powerspec=False, scaling='spectrum', normalize=True,
+             KOsmooth=False, bandwidth=40, KOnormalize=False):
     """
     Make amplitude spectrum of traces in stream and plot using rfft (for real inputs, no negative frequencies)
 
@@ -406,6 +406,8 @@ def spectrum(st, win=None, nfft=None, plot=False, powerspec=False, scaling='spec
         powerspec = False for fourier amplitude spectrum, True for power spectrum
         scaling = if powerspec is True, 'density' or 'spectrum' for power spectral density (V**2/Hz)
             or power spectrum (V**2)
+        normalize (bool): if True, will normalize by signal length by dividing by 1/NFFT (1/NFFT = deltat/time length),
+            if False, will scale by deltat (1/samprate) to approximate continuous transform
         KOsmooth (bool): if True, will smooth spectrum using Konno Ohmachi Smoothing
         bandwidth (int): bandwidth parameter for KOsmooth (typically 40)
         normalize (bool): for KOsmooth only, if False will normalize on a log scale (default), if True, will normalize on linear
@@ -511,7 +513,7 @@ def window(x, n, samprate, overlap, normalize=True, KOsmooth=False, window_corre
 
     Args:
         x (array): 1xn array data to window
-        n (int): length each window should be, in samples
+        n (int): length each window should be, in samples (before padding)
         overlap (float): proportion of overlap of windows, should be between 0 and 1
         normalize (bool): if True, will normalize by signal length by dividing by 1/NFFT (1/NFFT = deltat/time length),
             if False, will scale by deltat (1/samprate) to approximate continuous transform
@@ -540,6 +542,7 @@ def window(x, n, samprate, overlap, normalize=True, KOsmooth=False, window_corre
     newsampint = (n-noverlap)/samprate
     tstart = np.linspace(0, (col-1)*newsampint, num=col)
     tmid = tstart + 0.5*newsampint
+    NFFT = nextpow2(n)
     if detrend:
         resultT = mlab.detrend(resultT1, key='linear', axis=0)
     else:
@@ -547,23 +550,22 @@ def window(x, n, samprate, overlap, normalize=True, KOsmooth=False, window_corre
     resultTwin, windowVals = mlab.apply_window(resultT, mlab.window_hanning, axis=0, return_window=True)
     if KOsmooth:
         if normalize:
-            resultF = np.fft.rfft(resultTwin, n=n, axis=0)/n
+            resultF = np.fft.rfft(resultTwin, n=NFFT, axis=0)/NFFT
         else:
-            resultF = np.fft.rfft(resultTwin, n=n, axis=0)/samprate
+            resultF = np.fft.rfft(resultTwin, n=NFFT, axis=0)/samprate
         if window_correction == 'amp':  # For hanning window
             resultF *= 2.0
         elif window_correction == 'energy':
             resultF *= 1.63
-        freqs = np.fft.rfftfreq(n, 1/samprate)
+        freqs = np.fft.rfftfreq(NFFT, 1/samprate)
         resultF = ksmooth(np.abs(resultF.T), freqs, normalize=KOnormalize, bandwidth=bandwidth)
         resultF = resultF.T
-
     else:
         if normalize:
-            resultF = np.fft.fft(resultTwin, n=n, axis=0)/n
+            resultF = np.fft.fft(resultTwin, n=NFFT, axis=0)/NFFT
         else:
-            resultF = np.fft.fft(resultTwin, n=n, axis=0)/samprate
-        freqs = np.fft.fftfreq(n, 1/samprate)
+            resultF = np.fft.fft(resultTwin, n=NFFT, axis=0)/samprate
+        freqs = np.fft.fftfreq(NFFT, 1/samprate)
         if window_correction == 'amp':
             resultF *= 2.0
         elif window_correction == 'energy':
@@ -650,15 +652,15 @@ def templateXcorr(datastream, template):
     """
     Normalized cross correlation of short template trace against longer data stream
     Based off matlab function coralTemplateXcorr.m by Justin Sweet
-    
+
     Args:
         datastream: obspy trace of longer time period to search for template matches
         template: obspy trace of shorter template
-    
+
     Returns (tuple): xcorFunc, xcorLags, where:
         xcorFunc: cross correlation function
         xcorLags: time shifts corresponding to xcorFunc
-    
+
 
     """
     if datastream.stats.sampling_rate != template.stats.sampling_rate:

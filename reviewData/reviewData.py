@@ -1576,7 +1576,7 @@ class InteractivePlot:
                 figsize = tuple([figsize[0], figsize[1] - textpos.height*figsize[1]])
                 figprint = recsec(self.st_current, xlim=np.sort(self.xlims[-2:]),
                                   ylim=ylims, scalfact=self.scalfact,
-                                  update=False, fighandle=[],
+                                  update=False, fighandle=None,
                                   norm=self.normflag, indfirst=self.indfirst,
                                   maxtraces=self.maxtraces, tscale=self.tscale,
                                   menu=None, processing=None,

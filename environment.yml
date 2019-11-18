@@ -3,17 +3,17 @@ channels:
 - conda-forge
 - defaults
 dependencies:
-- ipython=4.2.1
+- ipython
 - basemap
 - matplotlib
 - numpy
-- obspy
+- obspy=1.1.1
 - pandas
 - pytables
 - pytest
 - pytest-cov
 - pytest-mpl
-- python=3.5
+- python
 - scipy
 - scikit-learn
 - scikit-image

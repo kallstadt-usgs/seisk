@@ -23,7 +23,7 @@ import matplotlib
 
 Written by kallstadt@usgs.gov
 """
-
+plt.ion()
 
 def getdata(network, station, location, channel, starttime, endtime, attach_response=True,
             clientname='IRIS', savedat=False, folderdat='data',
@@ -1182,7 +1182,8 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
     fig, axes = plt.subplots(maxtraces, sharex=True, sharey=False, figsize=figsize)
 
     if maxtraces == 1:
-        axes = [axes]
+       axes = [axes]
+
     mcs = ('%.2f' % (st[0].stats.starttime.microsecond/10.**6)).replace('0.', '')
     timeprint = st[0].stats.starttime.strftime('%Y-%m-%dT%H:%M:%S.') + mcs
     title1 = 'Start time: %s (UTC)' % timeprint
@@ -1266,7 +1267,7 @@ def make_spectrogram(st, detrend=mlab.detrend_linear, indfirst=0, maxtraces=10, 
     else:
         plt.close(fig)
     #plt.tight_layout()
-    return fig
+    return fig, axes
 
 
 class InteractivePlot:

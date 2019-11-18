@@ -5,10 +5,11 @@ from obspy.core import Stream
 import matplotlib.pyplot as plt
 import numpy.ma as ma
 import scipy.stats as ss
-from scipy.signal import periodogram
+from scipy.signal import periodogram, savgol_filter
 import statsmodels.robust
 from obspy.signal.konnoohmachismoothing import konno_ohmachi_smoothing as ksmooth
 from matplotlib import mlab
+
 
 
 """
@@ -502,8 +503,10 @@ def maketvec(trace):
     return tvec
 
 
-def window(x, n, samprate, overlap, normalize=True, KOsmooth=False, window_correction=None, KOnormalize=False,
-           bandwidth=40, detrend=True):
+def window(x, n, samprate, overlap, normalize=True, KOsmooth=False,
+           window_correction=None, KOnormalize=False,
+           bandwidth=40, detrend=True, subtractmean=False,
+           winlen=201, polyorder=3):
     """
     Windowing borrowed from matplotlib.mlab for specgram (_spectral_helper)
     Applies hanning window (if use 0.5 overlap, amplitudes are ~preserved)
@@ -523,7 +526,11 @@ def window(x, n, samprate, overlap, normalize=True, KOsmooth=False, window_corre
             multiply spectrum by 2 to preserve amplitude, if 'energy' will multiply by 1.63
         normalize (bool): If True, KOsmooth will be smoothed linearly, otherwise will be smooth logarithmically
         bandwidth (float): bandwidth for KO smoothing
-        detrend
+        detrend (bool): if True, will detrend each window
+        subtractmean (bool): if True, will subtract time-averaged mean from
+            entire time series before windowing using savgol filter
+        winlen
+        polyorder
 
     Returns:
         tmid: time vector taken at midpoints of each window (in sec from 0)
@@ -536,15 +543,19 @@ def window(x, n, samprate, overlap, normalize=True, KOsmooth=False, window_corre
     if overlap < 0. or overlap > 1.:
         raise Exception('overlap must be between 0 and 1')
 
+    if subtractmean:
+        mean1 = savgol_filter(np.copy(x), winlen, polyorder)
+        x = np.copy(x) - mean1
+
     noverlap = int(overlap * n)
     resultT1 = mlab.stride_windows(x, n, noverlap)
     row, col = np.shape(resultT1)
     newsampint = (n-noverlap)/samprate
     tstart = np.linspace(0, (col-1)*newsampint, num=col)
-    tmid = tstart + 0.5*newsampint
+    tmid = tstart + 0.5*(n/samprate)  # shift by half of window length
     NFFT = nextpow2(n)
     if detrend:
-        resultT = mlab.detrend(resultT1, key='linear', axis=0)
+        resultT = mlab.detrend(resultT1, key='mean', axis=0)
     else:
         resultT = resultT1
     resultTwin, windowVals = mlab.apply_window(resultT, mlab.window_hanning, axis=0, return_window=True)

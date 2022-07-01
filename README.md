@@ -1,4 +1,5 @@
-# seisk
+# seisk - Note this repo is being archived as it is no longer kept up to date on github.
+
 
 ## Introduction
 
